@@ -79,6 +79,12 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     }
   }
 
+  // Keep amount_paid in sync with current selections
+  useEffect(() => {
+    const total = calculateTotalPrice()
+    setFormData(prev => ({ ...prev, amount_paid: total.toFixed(2) }))
+  }, [formData.selected_tech_events, formData.selected_non_tech_events, formData.selected_workshops, formData.selected_combos, events, workshops, combos])
+
   const fetchColleges = async () => {
     try {
       const { data, error } = await supabase
@@ -1452,35 +1458,6 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                        </div>
                      </label>
 
-                     <label className={`relative cursor-pointer rounded-lg border-2 p-4 transition-all ${
-                       formData.payment_method === 'cash' 
-                         ? 'border-[#C96F63] bg-[#0B1536]/50' 
-                         : 'border-[#C96F63]/30 bg-[#0B1536]/30'
-                     } backdrop-blur-sm`}>
-                       <input
-                         type="radio"
-                         name="payment_method"
-                         value="cash"
-                         checked={formData.payment_method === 'cash'}
-                         onChange={() => handlePaymentMethodChange('cash')}
-                         className="sr-only"
-                       />
-                       <div className="flex items-center space-x-3">
-                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                           formData.payment_method === 'cash' 
-                             ? 'border-[#C96F63] bg-[#C96F63]' 
-                             : 'border-[#C96F63]/30'
-                         }`}>
-                           {formData.payment_method === 'cash' && (
-                             <div className="w-2 h-2 bg-white rounded-full"></div>
-                           )}
-                         </div>
-                         <div>
-                           <div className="font-medium text-[#F6F9FF]">Cash Payment</div>
-                           <div className="text-sm text-[#F6F9FF]/60">Pay at the venue</div>
-                         </div>
-                       </div>
-                     </label>
                    </div>
                  </div>
 
@@ -1522,10 +1499,9 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       value={formData.transaction_id}
                       onChange={handleInputChange}
                       required
-                         disabled={formData.payment_method === 'cash'}
-                         className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
-                           validationErrors.transaction_id ? 'border-red-500' : 'border-[#C96F63]/30'
-                         } ${formData.payment_method === 'cash' ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
+                          validationErrors.transaction_id ? 'border-red-500' : 'border-[#C96F63]/30'
+                        }`}
                     />
                     {isValidating.transaction_id && (
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -1550,15 +1526,13 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                   <input
                     type="number"
                     name="amount_paid"
-                    value={formData.amount_paid}
+                    value={calculateTotalPrice().toFixed(2)}
                     onChange={handleInputChange}
                     required
-                       disabled={formData.payment_method === 'cash'}
-                       className={`mt-1 block w-full border border-[#C96F63]/30 rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
-                         formData.payment_method === 'cash' ? 'opacity-60 cursor-not-allowed' : ''
-                       }`}
+                    disabled
+                    className="mt-1 block w-full border border-[#C96F63]/30 rounded-md px-3 py-2 focus:outline-none bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm"
                   />
-                     <p className="mt-1 text-xs text-[#FFCC66]">
+                  <p className="mt-1 text-xs text-[#FFCC66]">
                     Expected total: ₹{calculateTotalPrice().toFixed(2)}
                   </p>
                                       </div>
