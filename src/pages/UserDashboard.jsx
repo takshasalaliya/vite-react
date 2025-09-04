@@ -43,6 +43,9 @@ export default function UserDashboard() {
   const [showLoginSuccess, setShowLoginSuccess] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [showEventModal, setShowEventModal] = useState(false)
+  const [showAttendanceAnimation, setShowAttendanceAnimation] = useState(false)
+  const [attendanceEventName, setAttendanceEventName] = useState('')
+  const [attendanceAnimationKey, setAttendanceAnimationKey] = useState(0)
 
   useEffect(() => {
     if (!user) {
@@ -306,9 +309,86 @@ export default function UserDashboard() {
           <ProfileContent userData={userData} />
         )}
         
-        {activeTab === 'attendance' && (
-          <AttendanceContent userData={userData} />
-        )}
+                  {activeTab === 'attendance' && (
+            <AttendanceContent 
+              userData={userData} 
+              activeTab={activeTab}
+              showAttendanceAnimation={showAttendanceAnimation}
+              setShowAttendanceAnimation={setShowAttendanceAnimation}
+              attendanceEventName={attendanceEventName}
+              setAttendanceEventName={setAttendanceEventName}
+              attendanceAnimationKey={attendanceAnimationKey}
+              setAttendanceAnimationKey={setAttendanceAnimationKey}
+            />
+          )}
+          
+          {/* Full-Screen Cinematic Animation Overlay */}
+          {showAttendanceAnimation && (
+            <div className="fixed inset-0 z-50 pointer-events-none">
+              <div className="cinematic-overlay">
+                {/* Background Effects */}
+                <div className="cinematic-background"></div>
+                
+                {/* Main Content */}
+                <div className="cinematic-content">
+                  {/* Event Name */}
+                  <div className="cinematic-event-name">
+                    {attendanceEventName.toUpperCase()}
+                  </div>
+                  
+                  {/* Status Messages */}
+                  <div className="cinematic-status">
+                    <div className="status-line">ATTENDANCE CONFIRMED</div>
+                    <div className="status-line">SCAN SUCCESSFUL</div>
+                    <div className="status-line">RECORDED</div>
+                  </div>
+                  
+                  {/* Timestamp */}
+                  <div className="cinematic-timestamp">
+                    {new Date().toLocaleString()}
+                  </div>
+                </div>
+                
+                {/* Particle Effects */}
+                <div className="cinematic-particles">
+                  {Array.from({ length: 100 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="cinematic-particle"
+                      style={{
+                        left: `${Math.random() * 100}%`,
+                        top: `${Math.random() * 100}%`,
+                        animationDelay: `${Math.random() * 3}s`,
+                        animationDuration: `${3 + Math.random() * 2}s`
+                      }}
+                    />
+                  ))}
+                </div>
+                
+                {/* Scan Lines */}
+                <div className="cinematic-scan-lines">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="cinematic-scan-line"
+                      style={{
+                        top: `${(i * 10)}%`,
+                        animationDelay: `${i * 0.2}s`
+                      }}
+                    />
+                  ))}
+                </div>
+                
+                {/* Corner Decorations */}
+                <div className="cinematic-corners">
+                  <div className="corner top-left"></div>
+                  <div className="corner top-right"></div>
+                  <div className="corner bottom-left"></div>
+                  <div className="corner bottom-right"></div>
+                </div>
+              </div>
+            </div>
+          )}
       </main>
 
       {/* Event Details Modal */}
@@ -1616,17 +1696,237 @@ function EventsContent({ userData, onViewEvent }) {
 
 
 // Attendance Content Component
-function AttendanceContent({ userData }) {
+function AttendanceContent({ 
+  userData, 
+  activeTab, 
+  showAttendanceAnimation, 
+  setShowAttendanceAnimation, 
+  attendanceEventName, 
+  setAttendanceEventName, 
+  attendanceAnimationKey, 
+  setAttendanceAnimationKey 
+}) {
   const [attendance, setAttendance] = useState([])
   const [loading, setLoading] = useState(true)
   const [showQRModal, setShowQRModal] = useState(false)
   const [qrCodeImage, setQrCodeImage] = useState('')
   const [generatingQR, setGeneratingQR] = useState(false)
+  const [processedAttendanceRecords, setProcessedAttendanceRecords] = useState(new Set())
 
   useEffect(() => {
     // Fetch user's attendance records
     fetchAttendanceRecords()
-  }, [])
+    
+    // Set up real-time subscription for attendance changes
+    if (userData?.email) {
+      setupRealtimeSubscription()
+    }
+    
+    // Set up polling as fallback (check every 2 seconds when QR section is active)
+    const pollInterval = setInterval(() => {
+      if (userData?.email && activeTab === 'attendance') {
+        checkForNewAttendance()
+      }
+    }, 2000)
+    
+    return () => {
+      // Cleanup subscription and polling
+      if (userData?.email) {
+        supabase.removeAllChannels()
+      }
+      clearInterval(pollInterval)
+    }
+  }, [userData?.email, activeTab])
+
+  // Fallback polling mechanism
+  const [lastAttendanceCount, setLastAttendanceCount] = useState(0)
+  
+  const checkForNewAttendance = async () => {
+    try {
+      if (!userData?.email) return
+      
+      const { data: userRecord } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', userData.email)
+        .single()
+      
+      if (!userRecord) return
+      
+      // Check for attendance records in the last 15 seconds
+      const fifteenSecondsAgo = new Date(Date.now() - 15000).toISOString()
+      
+      const { data: recentAttendanceRecords } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('user_id', userRecord.id)
+        .gte('scan_time', fifteenSecondsAgo)
+        .order('scan_time', { ascending: false })
+      
+      if (recentAttendanceRecords && recentAttendanceRecords.length > 0) {
+        // Check if we've already processed this attendance
+        const latestRecord = recentAttendanceRecords[0]
+        const recordKey = `${latestRecord.target_type}-${latestRecord.target_id}-${latestRecord.scan_time}`
+        
+        if (!processedAttendanceRecords.has(recordKey)) {
+          console.log('🎉 NEW ATTENDANCE DETECTED via polling!')
+          
+          // Get event name
+          let eventName = 'Event'
+          if (latestRecord.target_type === 'event') {
+            const { data: eventData } = await supabase
+              .from('events')
+              .select('name')
+              .eq('id', latestRecord.target_id)
+              .single()
+            eventName = eventData?.name || 'Event'
+          } else if (latestRecord.target_type === 'workshop') {
+            const { data: workshopData } = await supabase
+              .from('workshops')
+              .select('title')
+              .eq('id', latestRecord.target_id)
+              .single()
+            eventName = workshopData?.title || 'Workshop'
+          }
+          
+          // Trigger animation
+          setAttendanceEventName(eventName)
+          setShowAttendanceAnimation(true)
+          setAttendanceAnimationKey(prev => prev + 1)
+          
+          // Mark this record as processed
+          setProcessedAttendanceRecords(prev => new Set([...prev, recordKey]))
+          
+          setTimeout(() => {
+            fetchAttendanceRecords()
+          }, 1000)
+          
+          setTimeout(() => {
+            setShowAttendanceAnimation(false)
+          }, 8000)
+          
+          // Wait for 20 seconds before allowing next animation
+          setTimeout(() => {
+            setProcessedAttendanceRecords(new Set())
+          }, 28000) // 8s animation + 20s wait = 28s total
+        }
+      }
+    } catch (error) {
+      console.error('Error in polling check:', error)
+    }
+  }
+
+
+
+  // Removed sound function - no more audio notifications
+
+  const setupRealtimeSubscription = async () => {
+    try {
+      console.log('Setting up real-time subscription for user:', userData.email)
+      
+      // First get the user ID
+      const { data: userRecord, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', userData.email)
+        .single()
+
+      if (userError) {
+        console.error('Error fetching user ID:', userError)
+        return
+      }
+      
+      if (!userRecord) {
+        console.error('No user record found for email:', userData.email)
+        return
+      }
+
+      console.log('User ID for subscription:', userRecord.id)
+
+      // Subscribe to attendance changes for this user
+      const channel = supabase
+        .channel(`attendance-changes-${userRecord.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'attendance',
+            filter: `user_id=eq.${userRecord.id}`
+          },
+          async (payload) => {
+            console.log('🎉 ATTENDANCE DETECTED! New attendance record:', payload)
+            console.log('Payload details:', {
+              user_id: payload.new.user_id,
+              target_type: payload.new.target_type,
+              target_id: payload.new.target_id,
+              scan_time: payload.new.scan_time
+            })
+            
+            // Get event/workshop name
+            let eventName = 'Event'
+            try {
+              if (payload.new.target_type === 'event') {
+                const { data: eventData, error: eventError } = await supabase
+                  .from('events')
+                  .select('name')
+                  .eq('id', payload.new.target_id)
+                  .single()
+                
+                if (eventError) {
+                  console.error('Error fetching event data:', eventError)
+                } else {
+                  eventName = eventData?.name || 'Event'
+                  console.log('Event name found:', eventName)
+                }
+              } else if (payload.new.target_type === 'workshop') {
+                const { data: workshopData, error: workshopError } = await supabase
+                  .from('workshops')
+                  .select('title')
+                  .eq('id', payload.new.target_id)
+                  .single()
+                
+                if (workshopError) {
+                  console.error('Error fetching workshop data:', workshopError)
+                } else {
+                  eventName = workshopData?.title || 'Workshop'
+                  console.log('Workshop name found:', eventName)
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching event/workshop name:', error)
+            }
+            
+            console.log('🚀 TRIGGERING ANIMATION for event:', eventName)
+            
+            // Trigger animation
+            setAttendanceEventName(eventName)
+            setShowAttendanceAnimation(true)
+            setAttendanceAnimationKey(prev => prev + 1)
+            
+            // Refresh attendance records
+            setTimeout(() => {
+              console.log('Refreshing attendance records...')
+              fetchAttendanceRecords()
+            }, 1000)
+            
+            // Hide animation after 6 seconds
+            setTimeout(() => {
+              console.log('Hiding animation...')
+              setShowAttendanceAnimation(false)
+            }, 6000)
+          }
+        )
+        .subscribe((status) => {
+          console.log('Subscription status:', status)
+        })
+
+      console.log('Real-time subscription set up successfully')
+
+    } catch (error) {
+      console.error('Error setting up real-time subscription:', error)
+    }
+  }
 
   const fetchAttendanceRecords = async () => {
     try {
@@ -1942,7 +2242,7 @@ function AttendanceContent({ userData }) {
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
                 </div>
               ) : qrCodeImage ? (
-                <div className="w-48 h-48 bg-white rounded-lg p-4 flex items-center justify-center">
+                <div className="w-48 h-48 bg-white rounded-lg p-4 flex items-center justify-center relative overflow-hidden">
                   <img 
                     src={qrCodeImage} 
                     alt="Your QR Code" 
@@ -1960,6 +2260,9 @@ function AttendanceContent({ userData }) {
               <p className="text-sm text-gray-300 mb-4">
                 Show this QR code to event organizers for attendance marking
               </p>
+              
+              
+              
               <div className="flex space-x-3 justify-center">
                 {qrCodeImage && (
                   <button

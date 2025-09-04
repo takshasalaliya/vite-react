@@ -55,8 +55,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     { value: '2', label: '2nd Semester' },
     { value: '3', label: '3rd Semester' },
     { value: '4', label: '4th Semester' },
-    { value: '5', label: '5th Semester' },
-    { value: '6', label: '6th Semester' }
+    { value: '5', label: '5th Semester' }
   ]
 
   useEffect(() => {
