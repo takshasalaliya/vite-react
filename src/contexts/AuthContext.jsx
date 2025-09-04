@@ -26,8 +26,8 @@ export const AuthProvider = ({ children }) => {
 				console.log('AuthContext: User set:', result.user.email, 'Role:', result.role)
 				
 				// Check if user has valid access (admin, event_manager, or event_handler)
-				// Check if user has valid access (admin, event_manager, event_handler, registration_committee, or scanner_committee)
-				if (!['admin', 'event_manager', 'event_handler', 'registration_committee', 'scanner_committee'].includes(result.role.trim())) {
+				// Check if user has valid access (admin, event_manager, event_handler, registration_committee, scanner_committee, or participant)
+				if (!['admin', 'event_manager', 'event_handler', 'registration_committee', 'scanner_committee', 'participant'].includes(result.role.trim())) {
 					console.log('AuthContext: User role not authorized:', result.role)
 					setUser(null)
 					setUserRole(null)
@@ -67,6 +67,9 @@ export const AuthProvider = ({ children }) => {
 	const isRegistrationCommittee = userRole === 'registration_committee'
 	const isScannerCommittee = userRole === 'scanner_committee'
 	
+	// Check if user is participant
+	const isParticipant = userRole === 'participant'
+	
 	// Check if user can access admin panel (admin only)
 	const canAccessAdminPanel = isAdmin
 	
@@ -75,6 +78,9 @@ export const AuthProvider = ({ children }) => {
 
 	// Check if user can access registration committee panel (admin, registration_committee, or scanner_committee)
 	const canAccessRegistrationCommitteePanel = isAdmin || isRegistrationCommittee || isScannerCommittee
+	
+	// Check if user can access user dashboard (participant)
+	const canAccessUserDashboard = isParticipant
 
 	useEffect(() => {
 		const initializeAuth = async () => {
@@ -106,9 +112,11 @@ export const AuthProvider = ({ children }) => {
 		isEventManager,
 		isRegistrationCommittee,
 		isScannerCommittee,
+		isParticipant,
 		canAccessAdminPanel,
 		canAccessEventManagerPanel,
 		canAccessRegistrationCommitteePanel,
+		canAccessUserDashboard,
 		signIn,
 		signOut,
 	}

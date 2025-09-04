@@ -47,7 +47,7 @@ const Registrations = () => {
 
   useEffect(() => {
     fetchRegistrations()
-  }, [currentPage, searchTerm, selectedTargetType, selectedPaymentStatus, dateRange])
+  }, [currentPage, selectedTargetType, selectedPaymentStatus, dateRange])
 
   const fetchRegistrations = async () => {
     try {
@@ -56,17 +56,10 @@ const Registrations = () => {
       let query = supabase
         .from('registrations')
         .select(`
-          *,
-          users!inner(name, email, enrollment_number),
-          events!inner(name),
-          workshops!inner(title),
-          combos!inner(name)
+          id, user_id, target_type, target_id, amount_paid, transaction_id, payment_status, created_at,
+          users(id, name, email, enrollment_number)
         `, { count: 'exact' })
         .order('created_at', { ascending: false })
-
-      if (searchTerm) {
-        query = query.or(`users.name.ilike.%${searchTerm}%,users.email.ilike.%${searchTerm}%,users.enrollment_number.ilike.%${searchTerm}%`)
-      }
 
       if (selectedTargetType) {
         query = query.eq('target_type', selectedTargetType)
@@ -91,22 +84,38 @@ const Registrations = () => {
 
       if (error) throw error
 
-      // Process data to get target names
-      const processedRegistrations = data?.map(reg => {
-        let targetName = ''
-        if (reg.target_type === 'event' && reg.events) {
-          targetName = reg.events.name
-        } else if (reg.target_type === 'workshop' && reg.workshops) {
-          targetName = reg.workshops.title
-        } else if (reg.target_type === 'combo' && reg.combos) {
-          targetName = reg.combos.name
-        }
+      // Collect target IDs per type and fetch their names
+      const eventIds = Array.from(new Set((data || []).filter(r => r.target_type === 'event').map(r => r.target_id)))
+      const workshopIds = Array.from(new Set((data || []).filter(r => r.target_type === 'workshop').map(r => r.target_id)))
+      const comboIds = Array.from(new Set((data || []).filter(r => r.target_type === 'combo').map(r => r.target_id)))
 
-        return {
-          ...reg,
-          targetName
-        }
-      }) || []
+      const [eventsRes, workshopsRes, combosRes] = await Promise.all([
+        eventIds.length ? supabase.from('events').select('id, name').in('id', eventIds) : Promise.resolve({ data: [] }),
+        workshopIds.length ? supabase.from('workshops').select('id, title').in('id', workshopIds) : Promise.resolve({ data: [] }),
+        comboIds.length ? supabase.from('combos').select('id, name').in('id', comboIds) : Promise.resolve({ data: [] })
+      ])
+
+      const eventsMap = new Map((eventsRes.data || []).map(e => [e.id, e.name]))
+      const workshopsMap = new Map((workshopsRes.data || []).map(w => [w.id, w.title]))
+      const combosMap = new Map((combosRes.data || []).map(c => [c.id, c.name]))
+
+      let processedRegistrations = (data || []).map(reg => ({
+        ...reg,
+        targetName:
+          reg.target_type === 'event' ? (eventsMap.get(reg.target_id) || '') :
+          reg.target_type === 'workshop' ? (workshopsMap.get(reg.target_id) || '') :
+          reg.target_type === 'combo' ? (combosMap.get(reg.target_id) || '') : ''
+      }))
+
+      // Client-side search filter on current page
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        processedRegistrations = processedRegistrations.filter(r => (
+          (r.users?.name || '').toLowerCase().includes(term) ||
+          (r.users?.email || '').toLowerCase().includes(term) ||
+          (r.users?.enrollment_number || '').toLowerCase().includes(term)
+        ))
+      }
 
       setRegistrations(processedRegistrations)
       setTotalPages(Math.ceil((count || 0) / pageSize))

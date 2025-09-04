@@ -59,7 +59,7 @@ CREATE TABLE events (
   description TEXT,
   photo_url TEXT,
   price NUMERIC(10,2) DEFAULT 0,
-  category TEXT CHECK (category IN ('tech','non-tech')),
+  category TEXT CHECK (category IN ('tech','workshop','non-tech')),
   handler_id UUID REFERENCES users(id) ON DELETE SET NULL,
   manager_id UUID REFERENCES users(id) ON DELETE SET NULL,
   max_participants INTEGER DEFAULT NULL,
@@ -139,22 +139,3 @@ CREATE INDEX IF NOT EXISTS idx_workshops_created_by ON workshops(created_by);
 CREATE INDEX IF NOT EXISTS idx_combos_created_by ON combos(created_by);
 CREATE INDEX IF NOT EXISTS idx_combo_items_target ON combo_items(target_type, target_id);
 
--- Step 5: Insert basic data
-INSERT INTO colleges (id, name) VALUES
-  ('550e8400-e29b-41d4-a716-446655440001', 'Tech University');
-
-INSERT INTO fields (id, name) VALUES
-  ('550e8400-e29b-41d4-a716-446655440010', 'Computer Science');
-
--- Step 6: Insert admin user (REPLACE WITH YOUR AUTH USER ID)
-INSERT INTO users (id, name, email, phone, enrollment_number, college_id, role) VALUES
-  ('REPLACE_WITH_ADMIN_AUTH_UUID', 'Admin User', 'admin@college.edu', 'admin123', 'ADMIN001', '550e8400-e29b-41d4-a716-446655440001', 'admin');
-
--- Step 7: Insert sample event
-INSERT INTO events (id, name, description, price, category, max_participants, is_active, created_by) VALUES
-  ('550e8400-e29b-41d4-a716-446655440200', 'Test Event', 'A test event for development', 25.00, 'tech', 100, true, 'REPLACE_WITH_ADMIN_AUTH_UUID');
-
--- Step 8: Verify setup
-SELECT 'Setup complete!' as status;
-SELECT 'Admin user:' as info, name, email, role FROM users WHERE email = 'admin@college.edu';
-SELECT 'Tables created:' as info, COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'; 

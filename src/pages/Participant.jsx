@@ -9,7 +9,7 @@ export default function Participant() {
 			<header className="relative z-10 flex items-center justify-between px-6 py-4">
 				<Link to="/" className="text-sm text-red-400 hover:text-red-300">← Back</Link>
 				<h1 className="text-xl tracking-widest font-extrabold text-red-600 st-glow">
-					WISTERIA ’25
+					INNOSTRA ’25
 				</h1>
 				<div />
 			</header>

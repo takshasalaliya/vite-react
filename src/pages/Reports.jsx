@@ -2,548 +2,648 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { 
   Download, 
-  FileText, 
-  Users, 
   Calendar, 
-  BookOpen, 
-  Package,
-  BarChart3,
+  Users, 
+  DollarSign, 
   TrendingUp,
-  DollarSign
+  BarChart3,
+  FileText,
+  Filter,
+  RefreshCw,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 const Reports = () => {
   const [loading, setLoading] = useState(false)
-  const [reportType, setReportType] = useState('users')
-  const [filters, setFilters] = useState({
-    college: '',
-    field: '',
-    target: '',
-    paymentStatus: '',
-    dateRange: { start: '', end: '' }
-  })
-  const [colleges, setColleges] = useState([])
-  const [fields, setFields] = useState([])
-  const [events, setEvents] = useState([])
-  const [workshops, setWorkshops] = useState([])
-  const [combos, setCombos] = useState([])
+  const [reports, setReports] = useState([])
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [dateRange, setDateRange] = useState('all')
+  const [reportType, setReportType] = useState('all')
 
   useEffect(() => {
-    fetchFilterOptions()
-  }, [])
+    generateReports()
+  }, [dateRange, reportType])
 
-  const fetchFilterOptions = async () => {
-    try {
-      const [collegesData, fieldsData, eventsData, workshopsData, combosData] = await Promise.all([
-        supabase.from('colleges').select('id, name').order('name'),
-        supabase.from('fields').select('id, name').order('name'),
-        supabase.from('events').select('id, name').eq('is_active', true).order('name'),
-        supabase.from('workshops').select('id, title').eq('is_active', true).order('title'),
-        supabase.from('combos').select('id, name').eq('is_active', true).order('name')
-      ])
-
-      setColleges(collegesData.data || [])
-      setFields(fieldsData.data || [])
-      setEvents(eventsData.data || [])
-      setWorkshops(workshopsData.data || [])
-      setCombos(combosData.data || [])
-    } catch (error) {
-      console.error('Error fetching filter options:', error)
-    }
-  }
-
-  const generateReport = async () => {
+  const generateReports = async () => {
     setLoading(true)
-    
     try {
-      let data = []
-      
-      switch (reportType) {
-        case 'users':
-          data = await generateUsersReport()
-          break
-        case 'registrations':
-          data = await generateRegistrationsReport()
-          break
-        case 'attendance':
-          data = await generateAttendanceReport()
-          break
-        case 'financial':
-          data = await generateFinancialReport()
-          break
-        default:
-          throw new Error('Invalid report type')
+      const reportsData = []
+
+      // Event Registrations Report
+      if (reportType === 'all' || reportType === 'events') {
+        const eventReport = await generateEventReport()
+        reportsData.push(eventReport)
       }
 
-      if (data.length === 0) {
-        alert('No data found for the selected filters')
-        return
+      // Workshop Registrations Report
+      if (reportType === 'all' || reportType === 'workshops') {
+        const workshopReport = await generateWorkshopReport()
+        reportsData.push(workshopReport)
       }
 
-      exportToExcel(data, reportType)
+      // Combo Registrations Report
+      if (reportType === 'all' || reportType === 'combos') {
+        const comboReport = await generateComboReport()
+        reportsData.push(comboReport)
+      }
+
+      // Payment Summary Report
+      if (reportType === 'all' || reportType === 'payments') {
+        const paymentReport = await generatePaymentReport()
+        reportsData.push(paymentReport)
+      }
+
+      // User Analytics Report
+      if (reportType === 'all' || reportType === 'users') {
+        const userReport = await generateUserReport()
+        reportsData.push(userReport)
+      }
+
+      setReports(reportsData)
     } catch (error) {
-      console.error('Error generating report:', error)
-      alert('Error generating report: ' + error.message)
+      console.error('Error generating reports:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const generateUsersReport = async () => {
-    let query = supabase
-      .from('users')
-      .select(`
-        *,
-        colleges!inner(name),
-        fields!inner(name)
-      `)
-      .order('created_at', { ascending: false })
-
-    if (filters.college) {
-      query = query.eq('college_id', filters.college)
-    }
-
-    if (filters.field) {
-      query = query.eq('field_id', filters.field)
-    }
-
-    const { data, error } = await query
-    if (error) throw error
-
-    return data?.map(user => ({
-      'Name': user.name,
-      'Email': user.email,
-      'Phone': user.phone || '',
-      'Enrollment Number': user.enrollment_number || '',
-      'College': user.colleges?.name || '',
-      'Semester': user.semester || '',
-      'Field': user.fields?.name || '',
-      'Role': user.role,
-      'Created At': new Date(user.created_at).toLocaleDateString()
-    })) || []
-  }
-
-  const generateRegistrationsReport = async () => {
+  const generateEventReport = async () => {
     let query = supabase
       .from('registrations')
       .select(`
-        *,
-        users!inner(name, email, enrollment_number),
-        events!inner(name),
-        workshops!inner(title),
-        combos!inner(name)
+        id, payment_status, amount_paid, created_at,
+        users(id, name, email, phone, college_id, semester, field_id),
+        events(id, name, price, category)
       `)
-      .order('created_at', { ascending: false })
+      .eq('target_type', 'event')
 
-    if (filters.target) {
-      const [type, id] = filters.target.split(':')
-      query = query.eq('target_type', type).eq('target_id', id)
+    if (dateRange !== 'all') {
+      const startDate = getStartDate(dateRange)
+      query = query.gte('created_at', startDate)
     }
 
-    if (filters.paymentStatus) {
-      query = query.eq('payment_status', filters.paymentStatus)
-    }
+    const { data: registrations } = await query
 
-    if (filters.dateRange.start) {
-      query = query.gte('created_at', filters.dateRange.start)
-    }
+    const totalRegistrations = registrations?.length || 0
+    const paidRegistrations = registrations?.filter(r => r.payment_status === 'approved').length || 0
+    const pendingRegistrations = registrations?.filter(r => r.payment_status === 'pending').length || 0
+    const totalRevenue = registrations?.reduce((sum, r) => sum + (r.amount_paid || 0), 0) || 0
 
-    if (filters.dateRange.end) {
-      query = query.lte('created_at', filters.dateRange.end + 'T23:59:59')
-    }
-
-    const { data, error } = await query
-    if (error) throw error
-
-    return data?.map(reg => {
-      let targetName = ''
-      if (reg.target_type === 'event' && reg.events) {
-        targetName = reg.events.name
-      } else if (reg.target_type === 'workshop' && reg.workshops) {
-        targetName = reg.workshops.title
-      } else if (reg.target_type === 'combo' && reg.combos) {
-        targetName = reg.combos.name
-      }
-
-      return {
-        'User Name': reg.users.name,
-        'Email': reg.users.email,
-        'Enrollment Number': reg.users.enrollment_number || '',
-        'Target Type': reg.target_type,
-        'Target Name': targetName,
-        'Amount Paid': reg.amount_paid || 0,
-        'Transaction ID': reg.transaction_id || '',
-        'Payment Status': reg.payment_status,
-        'Selected': reg.selected ? 'Yes' : 'No',
-        'Created At': new Date(reg.created_at).toLocaleDateString()
-      }
-    }) || []
-  }
-
-  const generateAttendanceReport = async () => {
-    let query = supabase
-      .from('attendance')
-      .select(`
-        *,
-        users!inner(name, email, enrollment_number),
-        events!inner(name),
-        workshops!inner(title)
-      `)
-      .order('scan_time', { ascending: false })
-
-    if (filters.target) {
-      const [type, id] = filters.target.split(':')
-      query = query.eq('target_type', type).eq('target_id', id)
-    }
-
-    if (filters.dateRange.start) {
-      query = query.gte('scan_time', filters.dateRange.start)
-    }
-
-    if (filters.dateRange.end) {
-      query = query.lte('scan_time', filters.dateRange.end + 'T23:59:59')
-    }
-
-    const { data, error } = await query
-    if (error) throw error
-
-    return data?.map(log => {
-      let targetName = ''
-      if (log.target_type === 'event' && log.events) {
-        targetName = log.events.name
-      } else if (log.target_type === 'workshop' && log.workshops) {
-        targetName = log.workshops.title
-      }
-
-      return {
-        'User Name': log.users.name,
-        'Email': log.users.email,
-        'Enrollment Number': log.users.enrollment_number || '',
-        'Target Type': log.target_type,
-        'Target Name': targetName,
-        'Scan Time': new Date(log.scan_time).toLocaleString(),
-        'Scanned By': log.scanned_by || 'System'
-      }
-    }) || []
-  }
-
-  const generateFinancialReport = async () => {
-    const { data, error } = await supabase
-      .from('registrations')
-      .select(`
-        *,
-        events!inner(name),
-        workshops!inner(title),
-        combos!inner(name)
-      `)
-      .eq('payment_status', 'approved')
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-
-    // Group by date and calculate totals
-    const dailyTotals = data?.reduce((acc, reg) => {
-      const date = new Date(reg.created_at).toLocaleDateString()
-      if (!acc[date]) {
-        acc[date] = {
-          date,
+    // Group by event
+    const eventStats = {}
+    registrations?.forEach(reg => {
+      const eventName = reg.events?.name || 'Unknown Event'
+      if (!eventStats[eventName]) {
+        eventStats[eventName] = {
           total: 0,
-          eventRevenue: 0,
-          workshopRevenue: 0,
-          comboRevenue: 0,
-          count: 0
+          paid: 0,
+          pending: 0,
+          revenue: 0
         }
       }
-      
-      acc[date].total += reg.amount_paid || 0
-      acc[date].count += 1
-      
-      if (reg.target_type === 'event') {
-        acc[date].eventRevenue += reg.amount_paid || 0
-      } else if (reg.target_type === 'workshop') {
-        acc[date].workshopRevenue += reg.amount_paid || 0
-      } else if (reg.target_type === 'combo') {
-        acc[date].comboRevenue += reg.amount_paid || 0
+      eventStats[eventName].total++
+      if (reg.payment_status === 'approved') {
+        eventStats[eventName].paid++
+        eventStats[eventName].revenue += reg.amount_paid || 0
+      } else if (reg.payment_status === 'pending') {
+        eventStats[eventName].pending++
       }
-      
-      return acc
-    }, {}) || {}
-
-    return Object.values(dailyTotals).map(day => ({
-      'Date': day.date,
-      'Total Revenue': day.total,
-      'Event Revenue': day.eventRevenue,
-      'Workshop Revenue': day.workshopRevenue,
-      'Combo Revenue': day.comboRevenue,
-      'Transaction Count': day.count
-    }))
-  }
-
-  const exportToExcel = (data, reportName) => {
-    const ws = XLSX.utils.json_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, reportName.charAt(0).toUpperCase() + reportName.slice(1))
-    XLSX.writeFile(wb, `${reportName}-report-${new Date().toISOString().split('T')[0]}.xlsx`)
-  }
-
-  const clearFilters = () => {
-    setFilters({
-      college: '',
-      field: '',
-      target: '',
-      paymentStatus: '',
-      dateRange: { start: '', end: '' }
     })
+
+    return {
+      id: 'event-registrations',
+      title: 'Event Registrations',
+      type: 'events',
+      icon: Calendar,
+      summary: {
+        totalRegistrations,
+        paidRegistrations,
+        pendingRegistrations,
+        totalRevenue
+      },
+      details: eventStats,
+      rawData: registrations
+    }
   }
 
-  const reportTypes = [
-    { value: 'users', label: 'Users Report', icon: Users, description: 'Export user data with filters' },
-    { value: 'registrations', label: 'Registrations Report', icon: Calendar, description: 'Export registration data with payment status' },
-    { value: 'attendance', label: 'Attendance Report', icon: BookOpen, description: 'Export attendance logs with filters' },
-    { value: 'financial', label: 'Financial Report', icon: DollarSign, description: 'Export revenue and payment data' }
-  ]
+  const generateWorkshopReport = async () => {
+    let query = supabase
+      .from('registrations')
+      .select(`
+        id, payment_status, amount_paid, created_at,
+        users(id, name, email, phone, college_id, semester, field_id),
+        workshops(id, title, fee, speakers)
+      `)
+      .eq('target_type', 'workshop')
 
-  const paymentStatuses = [
-    { value: 'pending', label: 'Pending' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'declined', label: 'Declined' },
-    { value: 'not_required', label: 'Not Required' }
-  ]
+    if (dateRange !== 'all') {
+      const startDate = getStartDate(dateRange)
+      query = query.gte('created_at', startDate)
+    }
 
-  const allTargets = [
-    ...events.map(e => ({ id: e.id, type: 'event', name: e.name })),
-    ...workshops.map(w => ({ id: w.id, type: 'workshop', name: w.title })),
-    ...combos.map(c => ({ id: c.id, type: 'combo', name: c.name }))
-  ]
+    const { data: registrations } = await query
+
+    const totalRegistrations = registrations?.length || 0
+    const paidRegistrations = registrations?.filter(r => r.payment_status === 'approved').length || 0
+    const pendingRegistrations = registrations?.filter(r => r.payment_status === 'pending').length || 0
+    const totalRevenue = registrations?.reduce((sum, r) => sum + (r.amount_paid || 0), 0) || 0
+
+    // Group by workshop
+    const workshopStats = {}
+    registrations?.forEach(reg => {
+      const workshopTitle = reg.workshops?.title || 'Unknown Workshop'
+      if (!workshopStats[workshopTitle]) {
+        workshopStats[workshopTitle] = {
+          total: 0,
+          paid: 0,
+          pending: 0,
+          revenue: 0
+        }
+      }
+      workshopStats[workshopTitle].total++
+      if (reg.payment_status === 'approved') {
+        workshopStats[workshopTitle].paid++
+        workshopStats[workshopTitle].revenue += reg.amount_paid || 0
+      } else if (reg.payment_status === 'pending') {
+        workshopStats[workshopTitle].pending++
+      }
+    })
+
+    return {
+      id: 'workshop-registrations',
+      title: 'Workshop Registrations',
+      type: 'workshops',
+      icon: BarChart3,
+      summary: {
+        totalRegistrations,
+        paidRegistrations,
+        pendingRegistrations,
+        totalRevenue
+      },
+      details: workshopStats,
+      rawData: registrations
+    }
+  }
+
+  const generateComboReport = async () => {
+    let query = supabase
+      .from('registrations')
+      .select(`
+        id, payment_status, amount_paid, created_at,
+        users(id, name, email, phone, college_id, semester, field_id),
+        combos(id, name, price)
+      `)
+      .eq('target_type', 'combo')
+
+    if (dateRange !== 'all') {
+      const startDate = getStartDate(dateRange)
+      query = query.gte('created_at', startDate)
+    }
+
+    const { data: registrations } = await query
+
+    const totalRegistrations = registrations?.length || 0
+    const paidRegistrations = registrations?.filter(r => r.payment_status === 'approved').length || 0
+    const pendingRegistrations = registrations?.filter(r => r.payment_status === 'pending').length || 0
+    const totalRevenue = registrations?.reduce((sum, r) => sum + (r.amount_paid || 0), 0) || 0
+
+    // Group by combo
+    const comboStats = {}
+    registrations?.forEach(reg => {
+      const comboName = reg.combos?.name || 'Unknown Combo'
+      if (!comboStats[comboName]) {
+        comboStats[comboName] = {
+          total: 0,
+          paid: 0,
+          pending: 0,
+          revenue: 0
+        }
+      }
+      comboStats[comboName].total++
+      if (reg.payment_status === 'approved') {
+        comboStats[comboName].paid++
+        comboStats[comboName].revenue += reg.amount_paid || 0
+      } else if (reg.payment_status === 'pending') {
+        comboStats[comboName].pending++
+      }
+    })
+
+      return {
+      id: 'combo-registrations',
+      title: 'Combo Registrations',
+      type: 'combos',
+      icon: TrendingUp,
+      summary: {
+        totalRegistrations,
+        paidRegistrations,
+        pendingRegistrations,
+        totalRevenue
+      },
+      details: comboStats,
+      rawData: registrations
+    }
+  }
+
+  const generatePaymentReport = async () => {
+    let query = supabase
+      .from('registrations')
+      .select('*')
+
+    if (dateRange !== 'all') {
+      const startDate = getStartDate(dateRange)
+      query = query.gte('created_at', startDate)
+    }
+
+    const { data: registrations } = await query
+
+    const totalRegistrations = registrations?.length || 0
+    const approvedPayments = registrations?.filter(r => r.payment_status === 'approved').length || 0
+    const pendingPayments = registrations?.filter(r => r.payment_status === 'pending').length || 0
+    const declinedPayments = registrations?.filter(r => r.payment_status === 'declined').length || 0
+    const totalRevenue = registrations?.reduce((sum, r) => sum + (r.amount_paid || 0), 0) || 0
+
+    // Payment method breakdown
+    const paymentMethods = {}
+    registrations?.forEach(reg => {
+      const method = reg.payment_method || 'Unknown'
+      if (!paymentMethods[method]) {
+        paymentMethods[method] = {
+          count: 0,
+          amount: 0
+        }
+      }
+      paymentMethods[method].count++
+      paymentMethods[method].amount += reg.amount_paid || 0
+    })
+
+    return {
+      id: 'payment-summary',
+      title: 'Payment Summary',
+      type: 'payments',
+      icon: DollarSign,
+      summary: {
+        totalRegistrations,
+        approvedPayments,
+        pendingPayments,
+        declinedPayments,
+        totalRevenue
+      },
+      details: paymentMethods,
+      rawData: registrations
+    }
+  }
+
+  const generateUserReport = async () => {
+    let query = supabase
+      .from('users')
+      .select('*')
+
+    if (dateRange !== 'all') {
+      const startDate = getStartDate(dateRange)
+      query = query.gte('created_at', startDate)
+    }
+
+    const { data: users } = await query
+
+    const totalUsers = users?.length || 0
+    const activeUsers = users?.filter(u => u.is_active !== false).length || 0
+    const newUsers = users?.filter(u => {
+      const userDate = new Date(u.created_at)
+      const weekAgo = new Date()
+      weekAgo.setDate(weekAgo.getDate() - 7)
+      return userDate >= weekAgo
+    }).length || 0
+
+    // College distribution
+    const collegeStats = {}
+    users?.forEach(user => {
+      const college = user.college_id || 'Unknown'
+      if (!collegeStats[college]) {
+        collegeStats[college] = 0
+      }
+      collegeStats[college]++
+    })
+
+      return {
+      id: 'user-analytics',
+      title: 'User Analytics',
+      type: 'users',
+      icon: Users,
+      summary: {
+        totalUsers,
+        activeUsers,
+        newUsers
+      },
+      details: collegeStats,
+      rawData: users
+    }
+  }
+
+  const getStartDate = (range) => {
+    const now = new Date()
+    switch (range) {
+      case 'today':
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      case 'week':
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      case 'month':
+        return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString()
+      case 'quarter':
+        return new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString()
+      default:
+        return null
+    }
+  }
+
+  const exportToExcel = (report) => {
+    if (!report.rawData || report.rawData.length === 0) {
+      alert('No data to export')
+      return
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(report.rawData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, report.title)
+    
+    const fileName = `${report.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+    XLSX.writeFile(workbook, fileName)
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      case 'declined':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Generating reports...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Header */}
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reports & Analytics</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Generate and export various reports from your event management system
-        </p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Reports & Analytics</h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">Comprehensive insights and data analysis</p>
       </div>
-
-      {/* Report Type Selection */}
-      <div className="card p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-          Select Report Type
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {reportTypes.map((type) => (
             <button
-              key={type.value}
-              onClick={() => setReportType(type.value)}
-              className={`p-4 rounded-lg border-2 text-left transition-colors ${
-                reportType === type.value
-                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
+              onClick={generateReports}
+              disabled={loading}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm sm:text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              <div className="flex items-center space-x-3">
-                <div className={`p-2 rounded-lg ${
-                  reportType === type.value
-                    ? 'bg-primary-100 dark:bg-primary-800'
-                    : 'bg-gray-100 dark:bg-gray-700'
-                }`}>
-                  <type.icon className={`h-5 w-5 ${
-                    reportType === type.value
-                      ? 'text-primary-600 dark:text-primary-400'
-                      : 'text-gray-600 dark:text-gray-400'
-                  }`} />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-white">
-                    {type.label}
-                  </h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {type.description}
-                  </p>
-                </div>
-              </div>
+              <RefreshCw className={`h-4 w-4 sm:h-5 sm:w-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
             </button>
-          ))}
         </div>
       </div>
 
       {/* Filters */}
-      <div className="card p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-          Report Filters
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reportType === 'users' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  College
-                </label>
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date Range</label>
                 <select
-                  value={filters.college}
-                  onChange={(e) => setFilters(prev => ({ ...prev, college: e.target.value }))}
-                  className="input-field"
-                >
-                  <option value="">All Colleges</option>
-                  {colleges.map(college => (
-                    <option key={college.id} value={college.id}>{college.name}</option>
-                  ))}
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">Last 30 Days</option>
+                <option value="quarter">Last 3 Months</option>
                 </select>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Field
-                </label>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Report Type</label>
                 <select
-                  value={filters.field}
-                  onChange={(e) => setFilters(prev => ({ ...prev, field: e.target.value }))}
-                  className="input-field"
-                >
-                  <option value="">All Fields</option>
-                  {fields.map(field => (
-                    <option key={field.id} value={field.id}>{field.name}</option>
-                  ))}
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+              >
+                <option value="all">All Reports</option>
+                <option value="events">Events</option>
+                <option value="workshops">Workshops</option>
+                <option value="combos">Combos</option>
+                <option value="payments">Payments</option>
+                <option value="users">Users</option>
                 </select>
               </div>
-            </>
-          )}
+          </div>
+        </div>
 
-          {(reportType === 'registrations' || reportType === 'attendance') && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Target
-              </label>
-              <select
-                value={filters.target}
-                onChange={(e) => setFilters(prev => ({ ...prev, target: e.target.value }))}
-                className="input-field"
-              >
-                <option value="">All Targets</option>
-                {allTargets.map(target => (
-                  <option key={`${target.type}:${target.id}`} value={`${target.type}:${target.id}`}>
-                    {target.name} ({target.type})
-                  </option>
-                ))}
-              </select>
+        {/* Reports Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {reports.map((report) => {
+            const Icon = report.icon
+            return (
+              <div key={report.id} className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+                <div className="p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
+                        <Icon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">{report.title}</h3>
+                    </div>
+                  </div>
+
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    {report.summary.totalRegistrations !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">{report.summary.totalRegistrations}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+                      </div>
+                    )}
+                    {report.summary.totalUsers !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">{report.summary.totalUsers}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Users</p>
+                      </div>
+                    )}
+                    {report.summary.paidRegistrations !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">{report.summary.paidRegistrations}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Paid</p>
+                      </div>
+                    )}
+                    {report.summary.approvedPayments !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">{report.summary.approvedPayments}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Approved</p>
+                      </div>
+                    )}
+                    {report.summary.pendingRegistrations !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{report.summary.pendingRegistrations}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Pending</p>
             </div>
           )}
-
-          {reportType === 'registrations' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Payment Status
-              </label>
-              <select
-                value={filters.paymentStatus}
-                onChange={(e) => setFilters(prev => ({ ...prev, paymentStatus: e.target.value }))}
-                className="input-field"
-              >
-                <option value="">All Statuses</option>
-                {paymentStatuses.map(status => (
-                  <option key={status.value} value={status.value}>{status.label}</option>
-                ))}
-              </select>
+                    {report.summary.pendingPayments !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{report.summary.pendingPayments}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Pending</p>
             </div>
           )}
-
-          {(reportType === 'registrations' || reportType === 'attendance') && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={filters.dateRange.start}
-                  onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, start: e.target.value } }))}
-                  className="input-field"
-                />
+                    {report.summary.totalRevenue !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">₹{report.summary.totalRevenue}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Revenue</p>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={filters.dateRange.end}
-                  onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, end: e.target.value } }))}
-                  className="input-field"
-                />
+                    )}
+                    {report.summary.activeUsers !== undefined && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{report.summary.activeUsers}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Active</p>
               </div>
-            </>
           )}
         </div>
 
-        <div className="flex justify-between items-center mt-6">
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
-            onClick={clearFilters}
-            className="btn-secondary"
-          >
-            Clear Filters
+                      onClick={() => {
+                        setSelectedReport(report)
+                        setShowModal(true)
+                      }}
+                      className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900 dark:text-indigo-200 dark:hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      View Details
           </button>
-
           <button
-            onClick={generateReport}
-            disabled={loading}
-            className="btn-primary flex items-center space-x-2"
+                      onClick={() => exportToExcel(report)}
+                      className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
-            {loading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : (
               <Download className="h-4 w-4" />
-            )}
-            <span>{loading ? 'Generating...' : 'Generate Report'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {reports.length === 0 && !loading && (
+          <div className="text-center py-12">
+            <FileText className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No reports</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">No data available for the selected filters.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Report Details Modal */}
+      {showModal && selectedReport && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 py-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
+            <div className="relative bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                    {selectedReport.title} - Details
+                  </h3>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <EyeOff className="h-6 w-6" />
           </button>
         </div>
       </div>
 
-      {/* Report Preview */}
-      <div className="card p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-          Report Preview
-        </h3>
-        
-        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-          <div className="flex items-center space-x-3">
-            <BarChart3 className="h-6 w-6 text-gray-400" />
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                <strong>Report Type:</strong> {reportTypes.find(t => t.value === reportType)?.label}
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                <strong>Filters Applied:</strong> {
-                  Object.entries(filters)
-                    .filter(([key, value]) => {
-                      if (key === 'dateRange') {
-                        return value.start || value.end
-                      }
-                      return value
-                    })
-                    .map(([key, value]) => {
-                      if (key === 'dateRange') {
-                        return `Date: ${value.start || 'Any'} to ${value.end || 'Any'}`
-                      }
-                      return `${key}: ${value}`
-                    })
-                    .join(', ') || 'None'
-                }
-              </p>
+              <div className="p-6">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Item</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Paid/Approved</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Pending</th>
+                        {selectedReport.summary.totalRevenue !== undefined && (
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Revenue</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {Object.entries(selectedReport.details).map(([key, value]) => (
+                        <tr key={key}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                            {key}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {value.total || value.count || value}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {value.paid || value.approved || '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {value.pending || '-'}
+                          </td>
+                          {selectedReport.summary.totalRevenue !== undefined && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                              ₹{value.revenue || value.amount || 0}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {Object.keys(selectedReport.details).length === 0 && (
+                  <div className="text-center py-8">
+                    <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No details</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">No detailed data available for this report.</p>
             </div>
+                )}
           </div>
           
-          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              Click "Generate Report" to create and download the Excel file with your selected filters.
-            </p>
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={() => exportToExcel(selectedReport)}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Export to Excel
+                  </button>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Close
+                  </button>
+                </div>
           </div>
         </div>
       </div>
+        </div>
+      )}
     </div>
   )
 }

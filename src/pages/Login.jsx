@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, Zap, Star, Sparkles, Moon, Sun, Rocket } from 'lucide-react'
 
 export default function Login() {
 	const [email, setEmail] = useState('')
@@ -9,8 +9,83 @@ export default function Login() {
 	const [showPassword, setShowPassword] = useState(false)
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState('')
+	const [showSuccess, setShowSuccess] = useState(false)
 	const { signIn } = useAuth()
 	const navigate = useNavigate()
+	const canvasRef = useRef(null)
+
+	// Starfield particle system for background
+	useEffect(() => {
+		const canvas = canvasRef.current
+		if (!canvas) return
+
+		const ctx = canvas.getContext('2d')
+		canvas.width = window.innerWidth
+		canvas.height = window.innerHeight
+
+		const stars = []
+		const starCount = 200
+
+		// Create stars
+		for (let i = 0; i < starCount; i++) {
+			stars.push({
+				x: Math.random() * canvas.width,
+				y: Math.random() * canvas.height,
+				vx: (Math.random() - 0.5) * 0.2,
+				vy: (Math.random() - 0.5) * 0.2,
+				size: Math.random() * 2 + 0.5,
+				opacity: Math.random() * 0.8 + 0.2,
+				twinkle: Math.random() * Math.PI * 2,
+				twinkleSpeed: Math.random() * 0.02 + 0.01,
+				color: ['#C96F63', '#FFCC66', '#1E3A8A', '#F6F9FF'][Math.floor(Math.random() * 4)]
+			})
+		}
+
+		// Animation loop
+		const animate = () => {
+			ctx.clearRect(0, 0, canvas.width, canvas.height)
+			
+			stars.forEach(star => {
+				star.x += star.vx
+				star.y += star.vy
+				star.twinkle += star.twinkleSpeed
+
+				// Wrap around edges
+				if (star.x < 0) star.x = canvas.width
+				if (star.x > canvas.width) star.x = 0
+				if (star.y < 0) star.y = canvas.height
+				if (star.y > canvas.height) star.y = 0
+
+				// Twinkling effect
+				const twinkleOpacity = star.opacity * (0.5 + 0.5 * Math.sin(star.twinkle))
+
+				// Draw star
+				ctx.beginPath()
+				ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2)
+				ctx.fillStyle = star.color + Math.floor(twinkleOpacity * 255).toString(16).padStart(2, '0')
+				ctx.fill()
+
+				// Add star glow
+				ctx.beginPath()
+				ctx.arc(star.x, star.y, star.size * 2, 0, Math.PI * 2)
+				ctx.fillStyle = star.color + Math.floor(twinkleOpacity * 50).toString(16).padStart(2, '0')
+				ctx.fill()
+			})
+
+			requestAnimationFrame(animate)
+		}
+
+		animate()
+
+		// Handle resize
+		const handleResize = () => {
+			canvas.width = window.innerWidth
+			canvas.height = window.innerHeight
+		}
+
+		window.addEventListener('resize', handleResize)
+		return () => window.removeEventListener('resize', handleResize)
+	}, [])
 
 	const handleSubmit = async (e) => {
 		e.preventDefault()
@@ -25,131 +100,181 @@ export default function Login() {
 			console.log('Calling signIn function...')
 			const result = await signIn(email, password)
 			console.log('SignIn result:', result)
-			console.log('SignIn result.user:', result?.user)
-			console.log('SignIn result.user?.email:', result?.user?.email)
 			
-			// Check if sign in was successful
-			if (result?.user) {
-				console.log('Login successful, navigating based on role...')
-				console.log('Current location before navigation:', window.location.pathname)
-				
-				// Determine navigation path based on user role
-				let navigationPath = '/'
-				
-				if (result.role === 'admin') {
-					navigationPath = '/admin/dashboard'
-					console.log('User is admin, navigating to admin dashboard')
-				} else if (result.role === 'event_manager') {
-					navigationPath = '/event-manager/dashboard'
-					console.log('User is event manager, navigating to event manager dashboard')
-				} else if (result.role === 'event_handler') {
-					navigationPath = '/event-handler/dashboard'
-					console.log('User is event handler, navigating to event handler dashboard')
-				} else if (result.role === 'registration_committee' || result.role === 'scanner_committee') {
-					navigationPath = '/registration-committee/users'
-					console.log('User is registration coordinator, navigating to registration coordinator dashboard')
-				} else {
-					console.log('Unknown role, navigating to root (will be redirected)')
-				}
-				
-				// Wait a moment for the auth state to update
+			// Check if authentication was successful by checking for user and role
+			if (result && result.user && result.role) {
+				setShowSuccess(true)
 				setTimeout(() => {
-					console.log('Executing navigation to', navigationPath)
-					navigate(navigationPath)
-					console.log('Navigation executed')
-				}, 100)
+					// Redirect based on user role
+					const role = result.role
+					if (role === 'admin') {
+						navigate('/admin/dashboard')
+					} else if (role === 'event_manager') {
+						navigate('/event-manager/dashboard')
+					} else if (role === 'event_handler') {
+						navigate('/event-handler/dashboard')
+					} else if (role === 'registration_committee' || role === 'scanner_committee') {
+						navigate('/registration-committee/users')
+					} else if (role === 'participant') {
+						navigate('/user')
+				} else {
+						// Fallback to user dashboard
+						navigate('/user')
+					}
+				}, 1500)
 			} else {
-				console.log('Login failed - no user data')
-				setError('Login failed. Please check your credentials.')
+				setError('Login failed - Invalid response from server')
 			}
-		} catch (error) {
-			console.error('Login error:', error)
-			setError(error.message || 'Login failed. Please check your credentials.')
+		} catch (err) {
+			console.error('Login error:', err)
+			setError(err.message || 'An unexpected error occurred')
 		} finally {
 			setLoading(false)
 		}
 	}
 
 	return (
-		<div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-			<div className="max-w-md w-full space-y-8">
-				<div>
-					<h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-						Sign in to your account
-					</h2>
-					<p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-						College Event Management System
-					</p>
-				</div>
-				<form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-					<div className="rounded-md shadow-sm -space-y-px">
-						<div className="relative">
-							<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-								<Mail className="h-5 w-5 text-gray-400" />
-							</div>
-							<input
-								id="email"
-								name="email"
-								type="email"
-								autoComplete="email"
-								required
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								className="appearance-none rounded-none relative block w-full px-3 py-2 pl-10 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-white dark:bg-gray-800"
-								placeholder="Email address"
+		<div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-[#07021A] via-[#0B1536] to-[#0B0412] text-[#F6F9FF]">
+			{/* Animated Starfield Background */}
+			<canvas
+				ref={canvasRef}
+				className="absolute inset-0 z-0"
+				style={{ background: 'radial-gradient(ellipse at center, #1E3A8A 0%, #0B1536 50%, #07021A 100%)' }}
+			/>
+
+			{/* Nebula Gradient Overlay */}
+			<div className="absolute inset-0 z-1 bg-gradient-to-b from-[#2A0E3D]/30 via-transparent to-[#0B0412]/40"></div>
+
+			{/* Main Content */}
+			<div className="relative z-20 flex items-center justify-center min-h-screen px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+				<div className="w-full max-w-md sm:max-w-lg">
+					{/* Header */}
+					<div className="text-center mb-8 sm:mb-12">
+						{/* Logo */}
+						<div className="flex justify-center mb-4 sm:mb-6">
+							<img 
+								src="/image/Logo with Name.png" 
+								alt="INNOSTRA Logo" 
+								className="h-12 sm:h-16 md:h-20 w-auto"
+								style={{ filter: 'drop-shadow(0 0 20px rgba(201, 111, 99, 0.5))' }}
 							/>
 						</div>
-						<div className="relative">
-							<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-								<Lock className="h-5 w-5 text-gray-400" />
-							</div>
+						
+						{/* Title */}
+						<h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-[0.1em] mb-2 sm:mb-4 text-white">
+							Enter the Galaxy
+						</h1>
+						
+						{/* Subtitle */}
+						<p className="text-sm sm:text-base text-[#F6F9FF]/80 max-w-sm mx-auto">
+							Access your stellar dashboard and explore the cosmos of events
+					</p>
+				</div>
+
+					{/* Login Form */}
+					<div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 sm:p-8 border border-white/20 shadow-2xl">
+						<form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+							{/* Email Field */}
+							<div>
+								<label htmlFor="email" className="block text-sm sm:text-base font-medium text-white mb-2">
+									<Mail className="inline-block w-4 h-4 mr-2" />
+									Email Address
+								</label>
 							<input
+									type="email"
+								id="email"
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+									required
+									className="w-full px-4 py-3 sm:py-4 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#C96F63] focus:border-transparent transition-all duration-300"
+										placeholder="Enter your email"
+							/>
+							</div>
+
+							{/* Password Field */}
+							<div>
+								<label htmlFor="password" className="block text-sm sm:text-base font-medium text-white mb-2">
+									<Lock className="inline-block w-4 h-4 mr-2" />
+									Password
+								</label>
+						<div className="relative">
+							<input
+										type={showPassword ? 'text' : 'password'}
 								id="password"
-								name="password"
-								type={showPassword ? 'text' : 'password'}
-								autoComplete="current-password"
-								required
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
-								className="appearance-none rounded-none relative block w-full px-3 py-2 pl-10 pr-10 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm bg-white dark:bg-gray-800"
-								placeholder="Password"
+										required
+										className="w-full px-4 py-3 sm:py-4 pr-12 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#C96F63] focus:border-transparent transition-all duration-300"
+										placeholder="Enter your password"
 							/>
 							<button
 								type="button"
-								className="absolute inset-y-0 right-0 pr-3 flex items-center"
 								onClick={() => setShowPassword(!showPassword)}
-							>
-								{showPassword ? (
-									<EyeOff className="h-5 w-5 text-gray-400" />
-								) : (
-									<Eye className="h-5 w-5 text-gray-400" />
-								)}
+										className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/50 hover:text-white transition-colors duration-200"
+									>
+										{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
 							</button>
 						</div>
 					</div>
 
+							{/* Error Message */}
 					{error && (
-						<div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
-							<div className="text-sm text-red-800 dark:text-red-200">{error}</div>
+								<div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3 sm:p-4 text-red-300 text-sm sm:text-base">
+									{error}
+									</div>
+							)}
+
+							{/* Success Message */}
+							{showSuccess && (
+								<div className="bg-green-500/20 border border-green-500/30 rounded-lg p-3 sm:p-4 text-green-300 text-sm sm:text-base">
+									Login successful! Redirecting...
 						</div>
 					)}
 
-					<div>
+							{/* Submit Button */}
 						<button
 							type="submit"
 							disabled={loading}
-							className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-						>
-							{loading ? 'Signing in...' : 'Sign in'}
+								className="w-full bg-gradient-to-r from-[#C96F63] to-[#C96F63]/80 text-white font-bold py-3 sm:py-4 px-6 rounded-lg hover:from-[#C96F63]/90 hover:to-[#C96F63]/70 focus:outline-none focus:ring-2 focus:ring-[#C96F63] focus:ring-offset-2 focus:ring-offset-transparent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+								>
+									{loading ? (
+									<>
+										<div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+										<span>Signing In...</span>
+									</>
+								) : (
+									<>
+										<Rocket className="w-5 h-5" />
+										<span>Launch into Dashboard</span>
+									</>
+									)}
 						</button>
+						</form>
+
+						{/* Back to Home Link */}
+						<div className="mt-6 sm:mt-8 text-center">
+							<a
+								href="/"
+								className="text-[#F6F9FF]/70 hover:text-[#F6F9FF] text-sm sm:text-base transition-colors duration-200 flex items-center justify-center space-x-2"
+							>
+								<Sparkles className="w-4 h-4" />
+								<span>Return to Home</span>
+							</a>
+						</div>
 					</div>
 
-					<div className="text-center">
-						<p className="text-xs text-gray-500 dark:text-gray-400">
-							Demo credentials: admin@college.edu / admin123
+					{/* Footer */}
+					<div className="mt-8 sm:mt-12 text-center">
+						<div className="flex items-center justify-center space-x-2 mb-2">
+							<Star className="w-4 h-4 text-[#C96F63]" />
+							<span className="text-[#F6F9FF]/60 text-xs sm:text-sm">INNOSTRA '25</span>
+							<Star className="w-4 h-4 text-[#C96F63]" />
+						</div>
+						<p className="text-[#F6F9FF]/50 text-xs sm:text-sm">
+							Every Mind Holds an Astra
 						</p>
 					</div>
-				</form>
+				</div>
 			</div>
 		</div>
 	)

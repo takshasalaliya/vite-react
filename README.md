@@ -1,4 +1,4 @@
-# 🎭 Wisteria '25 Event Management System
+# 🎭 INNOSTRA'25 Event Management System
 
 > **Welcome to the Upside Down of Event Management!** 
 
@@ -59,9 +59,9 @@ A revolutionary, Stranger Things-themed event management system built with React
    ```
 
 2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
 3. **Set up environment variables**
    ```bash
@@ -70,15 +70,15 @@ A revolutionary, Stranger Things-themed event management system built with React
    Fill in your Supabase credentials in `.env.local`
 
 4. **Set up the database**
-   ```bash
+```bash
    # Run the database setup script
    npm run setup-db
    ```
 
 5. **Start the development server**
-   ```bash
-   npm run dev
-   ```
+```bash
+npm run dev
+```
 
 6. **Open your browser**
    Navigate to `http://localhost:5173`

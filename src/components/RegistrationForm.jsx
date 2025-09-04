@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { uploadImage } from '../utils/imageUpload'
+import { uploadImage, validateImage } from '../utils/imageUpload'
 import { X, Check, AlertCircle, Upload, Sparkles, TreePine, Zap, Eye, Ghost, Skull, Moon, Star } from 'lucide-react'
 
 const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
@@ -17,6 +17,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     selected_non_tech_events: [],
     selected_workshops: [],
     selected_combos: [],
+    payment_method: 'online', // 'online' or 'cash'
     transaction_id: '',
     amount_paid: ''
   })
@@ -28,6 +29,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
   const [combos, setCombos] = useState([])
   const [loading, setLoading] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   const [validationErrors, setValidationErrors] = useState({
     email: '',
@@ -320,6 +322,27 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     }
   }
 
+  const handlePaymentMethodChange = (method) => {
+    setFormData(prev => {
+      const newFormData = {
+        ...prev,
+        payment_method: method
+      }
+      
+      if (method === 'cash') {
+        // Auto-fill transaction_id and amount_paid for cash payment
+        newFormData.transaction_id = 'CASH'
+        newFormData.amount_paid = calculateTotalPrice().toFixed(2)
+      } else {
+        // Clear fields for online payment
+        newFormData.transaction_id = ''
+        newFormData.amount_paid = ''
+      }
+      
+      return newFormData
+    })
+  }
+
   const handleEventChange = (eventId, category, checked) => {
     setFormData(prev => {
       const fieldName = category === 'tech' ? 'selected_tech_events' : 'selected_non_tech_events'
@@ -410,13 +433,21 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     if (!file) return
 
     try {
-      const photoUrl = await uploadImage(file, 'profile-photos')
+      setUploadingPhoto(true)
+      
+      // Validate the image file first
+      validateImage(file)
+      
+      const photoUrl = await uploadImage(file)
       setFormData(prev => ({
         ...prev,
         photo_url: photoUrl
       }))
     } catch (error) {
       console.error('Error uploading photo:', error)
+      alert(`Error uploading photo: ${error.message}`)
+    } finally {
+      setUploadingPhoto(false)
     }
   }
 
@@ -500,6 +531,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
       formData.college_id &&
       formData.field_id &&
       formData.semester &&
+      formData.payment_method &&
       formData.transaction_id &&
       formData.amount_paid &&
       !validationErrors.email &&
@@ -641,6 +673,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
         selected_non_tech_events: [],
         selected_workshops: [],
         selected_combos: [],
+        payment_method: 'online',
         transaction_id: '',
         amount_paid: ''
       })
@@ -670,172 +703,255 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
 
   return (
     <div className="fixed z-50 inset-0 overflow-y-auto">
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          select option {
+            background-color: #0B1536 !important;
+            color: #F6F9FF !important;
+          }
+          select option:hover {
+            background-color: #C96F63 !important;
+          }
+          select:focus option:checked {
+            background-color: #C96F63 !important;
+          }
+          
+          @keyframes fallingStar {
+            0% {
+              transform: translateY(-20px) rotate(0deg);
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(100vh) rotate(360deg);
+              opacity: 0;
+            }
+          }
+          
+          @keyframes sparkleBurst {
+            0% {
+              transform: scale(0) rotate(0deg);
+              opacity: 0;
+            }
+            50% {
+              transform: scale(1) rotate(180deg);
+              opacity: 1;
+            }
+            100% {
+              transform: scale(0) rotate(360deg);
+              opacity: 0;
+            }
+          }
+          
+          @keyframes starRain {
+            0% {
+              transform: translateY(-10px);
+              opacity: 0;
+            }
+            10% {
+              opacity: 1;
+            }
+            90% {
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(100vh);
+              opacity: 0;
+            }
+          }
+        `
+      }} />
       <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        {/* Enhanced Background with 3D Elements */}
+        {/* INNOSTRA Theme Background */}
         <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-          <div className="absolute inset-0 bg-gradient-to-br from-black via-gray-900 to-purple-900 opacity-95"></div>
+          {/* Starfield Background */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#07021A] via-[#0B1536] to-[#0B0412] opacity-95"></div>
           
-          {/* 3D Tree Branches - Desktop */}
-          <div className="hidden md:block absolute top-0 left-0 w-32 h-32 transform -rotate-12 opacity-30">
-            <TreePine className="w-full h-full text-green-800 animate-pulse" />
-          </div>
-          <div className="hidden md:block absolute top-10 right-10 w-24 h-24 transform rotate-12 opacity-40">
-            <TreePine className="w-full h-full text-green-700 animate-pulse" style={{ animationDelay: '1s' }} />
-          </div>
-          <div className="hidden md:block absolute bottom-20 left-20 w-20 h-20 transform rotate-45 opacity-25">
-            <TreePine className="w-full h-full text-green-600 animate-pulse" style={{ animationDelay: '2s' }} />
-          </div>
+          {/* Animated Starfield Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#07021A]/80 via-[#0B1536]/60 to-[#0B0412]/90"></div>
           
-          {/* 3D Tree Branches - Mobile */}
-          <div className="md:hidden absolute top-2 left-2 w-16 h-16 transform -rotate-12 opacity-40">
-            <TreePine className="w-full h-full text-green-800 animate-tree-sway" />
-          </div>
-          <div className="md:hidden absolute top-4 right-4 w-12 h-12 transform rotate-12 opacity-50">
-            <TreePine className="w-full h-full text-green-700 animate-tree-sway" style={{ animationDelay: '0.8s' }} />
-          </div>
-          <div className="md:hidden absolute bottom-4 left-4 w-10 h-10 transform rotate-45 opacity-35">
-            <TreePine className="w-full h-full text-green-600 animate-tree-sway" style={{ animationDelay: '1.6s' }} />
-          </div>
-          <div className="md:hidden absolute top-1/3 right-2 w-8 h-8 transform -rotate-30 opacity-30">
-            <TreePine className="w-full h-full text-green-500 animate-tree-sway" style={{ animationDelay: '2.4s' }} />
-          </div>
-          <div className="md:hidden absolute bottom-1/3 left-2 w-14 h-14 transform rotate-60 opacity-25">
-            <TreePine className="w-full h-full text-green-400 animate-tree-sway" style={{ animationDelay: '3.2s' }} />
-          </div>
+          {/* Nebula Effects */}
+          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-gradient-radial from-[#C96F63]/20 via-transparent to-transparent rounded-full animate-pulse"></div>
+          <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-gradient-radial from-[#1E3A8A]/15 via-transparent to-transparent rounded-full animate-pulse" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute top-1/2 left-0 w-48 h-48 bg-gradient-radial from-[#FFCC66]/10 via-transparent to-transparent rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
           
-          {/* Floating Elements - Desktop */}
-          <div className="hidden md:block absolute top-1/4 left-1/4 animate-float">
-            <Zap className="w-6 h-6 text-yellow-400 opacity-60" />
+          {/* Floating Particles */}
+          <div className="absolute top-20 left-20 w-2 h-2 bg-[#C96F63] rounded-full animate-ping opacity-60"></div>
+          <div className="absolute top-40 right-32 w-1 h-1 bg-[#FFCC66] rounded-full animate-ping opacity-40" style={{ animationDelay: '0.5s' }}></div>
+          <div className="absolute bottom-32 left-1/3 w-1.5 h-1.5 bg-[#1E3A8A] rounded-full animate-ping opacity-50" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute top-1/2 right-1/4 w-1 h-1 bg-[#C96F63] rounded-full animate-ping opacity-30" style={{ animationDelay: '1.5s' }}></div>
+          <div className="absolute bottom-20 right-20 w-2 h-2 bg-[#FFCC66] rounded-full animate-ping opacity-60" style={{ animationDelay: '2s' }}></div>
           </div>
-          <div className="hidden md:block absolute top-1/3 right-1/3 animate-float" style={{ animationDelay: '0.5s' }}>
-            <Eye className="w-5 h-5 text-red-400 opacity-50" />
-          </div>
-          <div className="hidden md:block absolute bottom-1/4 right-1/4 animate-float" style={{ animationDelay: '1.5s' }}>
-            <Ghost className="w-4 h-4 text-purple-400 opacity-40" />
-          </div>
-          <div className="hidden md:block absolute top-1/2 left-1/2 animate-float" style={{ animationDelay: '2.5s' }}>
-            <Skull className="w-3 h-3 text-gray-400 opacity-30" />
-          </div>
-          
-          {/* Floating Elements - Mobile */}
-          <div className="md:hidden absolute top-8 right-8 animate-float">
-            <Zap className="w-4 h-4 text-yellow-400 opacity-70" />
-          </div>
-          <div className="md:hidden absolute top-16 left-8 animate-float" style={{ animationDelay: '0.7s' }}>
-            <Eye className="w-3 h-3 text-red-400 opacity-60" />
-          </div>
-          <div className="md:hidden absolute bottom-16 right-12 animate-float" style={{ animationDelay: '1.4s' }}>
-            <Ghost className="w-3 h-3 text-purple-400 opacity-50" />
-          </div>
-          <div className="md:hidden absolute top-1/2 right-4 animate-float" style={{ animationDelay: '2.1s' }}>
-            <Skull className="w-2 h-2 text-gray-400 opacity-40" />
-          </div>
-          <div className="md:hidden absolute bottom-8 left-12 animate-float" style={{ animationDelay: '2.8s' }}>
-            <Star className="w-3 h-3 text-blue-400 opacity-45" />
-          </div>
-          
-          {/* Upside Down Portal Effects - Desktop */}
-          <div className="hidden md:block absolute top-0 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-gradient-radial from-red-500/20 via-transparent to-transparent rounded-full animate-pulse"></div>
-          <div className="hidden md:block absolute bottom-0 right-1/4 w-64 h-64 bg-gradient-radial from-blue-500/15 via-transparent to-transparent rounded-full animate-pulse" style={{ animationDelay: '1s' }}></div>
-          
-          {/* Upside Down Portal Effects - Mobile */}
-          <div className="md:hidden absolute top-0 left-1/2 transform -translate-x-1/2 w-48 h-48 bg-gradient-radial from-red-500/25 via-transparent to-transparent rounded-full animate-pulse"></div>
-          <div className="md:hidden absolute bottom-0 right-1/4 w-32 h-32 bg-gradient-radial from-blue-500/20 via-transparent to-transparent rounded-full animate-pulse" style={{ animationDelay: '1s' }}></div>
-          <div className="md:hidden absolute top-1/2 left-0 w-24 h-24 bg-gradient-radial from-purple-500/15 via-transparent to-transparent rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
-        </div>
         
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
         
-        <div className="inline-block align-bottom bg-gradient-to-br from-gray-900 via-purple-900 to-red-900 rounded-lg text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full w-full mx-4 border-2 border-purple-500/50 relative">
-          {/* 3D Border Effects */}
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-transparent to-red-500/20 rounded-lg"></div>
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-red-500"></div>
-          <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-purple-500"></div>
-          {/* Enhanced Success Animation Overlay */}
-          {showSuccess && (
-            <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 animate-pulse">
-              <div className="text-center relative">
-                {/* 3D Success Elements */}
-                <div className="absolute inset-0 bg-gradient-radial from-yellow-400/20 via-transparent to-transparent rounded-full animate-pulse"></div>
-                
-                <div className="mb-6 relative z-10">
-                  <div className="flex justify-center space-x-4 mb-4">
-                    <Sparkles className="h-12 w-12 text-yellow-400 animate-bounce" />
-                    <Star className="h-12 w-12 text-purple-400 animate-bounce" style={{ animationDelay: '0.3s' }} />
-                    <Moon className="h-12 w-12 text-blue-400 animate-bounce" style={{ animationDelay: '0.6s' }} />
+        <div className="inline-block align-bottom bg-gradient-to-br from-[#07021A] via-[#0B1536] to-[#0B0412] rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full w-full mx-4 border border-[#C96F63]/30 relative backdrop-blur-sm">
+          {/* Glassmorphic Border Effects */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#C96F63]/10 via-transparent to-[#1E3A8A]/10 rounded-2xl"></div>
+          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-[#C96F63] via-[#FFCC66] to-[#1E3A8A]"></div>
+          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#1E3A8A] via-[#FFCC66] to-[#C96F63]"></div>
+                     {/* INNOSTRA Success Animation Overlay */}
+           {showSuccess && (
+             <div className="absolute inset-0 bg-[#07021A]/95 flex items-center justify-center z-50 backdrop-blur-sm">
+               {/* Star Rain Animation */}
+               <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                                   {/* Star Rain Layer 1 - Fast */}
+                  <div className="absolute inset-0">
+                    {[...Array(20)].map((_, i) => (
+                      <div
+                        key={`star1-${i}`}
+                        className="absolute w-1 h-1 bg-[#C96F63] rounded-full"
+                        style={{
+                          left: `${Math.random() * 100}%`,
+                          top: '-10px',
+                          animationDelay: `${Math.random() * 2}s`,
+                          animationDuration: '1.5s',
+                          animationIterationCount: 'infinite',
+                          animationName: 'starRain'
+                        }}
+                      />
+                    ))}
+          </div>
+                  
+                  {/* Star Rain Layer 2 - Medium */}
+                  <div className="absolute inset-0">
+                    {[...Array(15)].map((_, i) => (
+                      <div
+                        key={`star2-${i}`}
+                        className="absolute w-1.5 h-1.5 bg-[#FFCC66] rounded-full"
+                        style={{
+                          left: `${Math.random() * 100}%`,
+                          top: '-10px',
+                          animationDelay: `${Math.random() * 3}s`,
+                          animationDuration: '2s',
+                          animationIterationCount: 'infinite',
+                          animationName: 'starRain'
+                        }}
+                      />
+                    ))}
+          </div>
+          
+                  {/* Star Rain Layer 3 - Slow */}
+                  <div className="absolute inset-0">
+                    {[...Array(10)].map((_, i) => (
+                      <div
+                        key={`star3-${i}`}
+                        className="absolute w-2 h-2 bg-[#1E3A8A] rounded-full"
+                        style={{
+                          left: `${Math.random() * 100}%`,
+                          top: '-10px',
+                          animationDelay: `${Math.random() * 4}s`,
+                          animationDuration: '2.5s',
+                          animationIterationCount: 'infinite',
+                          animationName: 'starRain'
+                        }}
+                      />
+                    ))}
+          </div>
+                 
+                 {/* Falling Stars with Trails */}
+                 <div className="absolute inset-0">
+                   {[...Array(8)].map((_, i) => (
+                     <div
+                       key={`falling-${i}`}
+                       className="absolute"
+                       style={{
+                         left: `${Math.random() * 100}%`,
+                         top: '-20px',
+                         animationDelay: `${Math.random() * 2}s`,
+                         animationDuration: '3s',
+                         animationIterationCount: 'infinite',
+                         animationName: 'fallingStar'
+                       }}
+                     >
+                       <div className="w-2 h-2 bg-[#C96F63] rounded-full shadow-lg shadow-[#C96F63]/50"></div>
+                       <div className="w-1 h-8 bg-gradient-to-b from-[#C96F63] to-transparent ml-0.5"></div>
+          </div>
+                   ))}
+          </div>
+                 
+                 {/* Sparkle Bursts */}
+                 <div className="absolute inset-0">
+                   {[...Array(6)].map((_, i) => (
+                     <div
+                       key={`sparkle-${i}`}
+                       className="absolute"
+                       style={{
+                         left: `${Math.random() * 100}%`,
+                         top: `${Math.random() * 100}%`,
+                         animationDelay: `${Math.random() * 3}s`,
+                         animationDuration: '2s',
+                         animationIterationCount: 'infinite',
+                         animationName: 'sparkleBurst'
+                       }}
+                     >
+                       <div className="w-3 h-3 bg-[#FFCC66] rounded-full animate-ping"></div>
+                       <div className="absolute inset-0 w-6 h-6 border border-[#FFCC66]/30 rounded-full animate-ping" style={{ animationDelay: '0.5s' }}></div>
+          </div>
+                   ))}
+          </div>
+        </div>
+        
+               <div className="text-center relative z-10">
+                 {/* Stellar Success Elements */}
+                 <div className="absolute inset-0 bg-gradient-radial from-[#C96F63]/20 via-transparent to-transparent rounded-full animate-pulse"></div>
+                 
+                 <div className="mb-8 relative z-10">
+                   <div className="flex justify-center space-x-4 mb-6">
+                     <div className="h-16 w-16 bg-gradient-to-br from-[#C96F63] to-[#C96F63]/80 rounded-full animate-bounce flex items-center justify-center">
+                       <Star className="w-8 h-8 text-white" />
+                     </div>
+                     <div className="h-16 w-16 bg-gradient-to-br from-[#FFCC66] to-[#FFCC66]/80 rounded-full animate-bounce flex items-center justify-center" style={{ animationDelay: '0.3s' }}>
+                       <Sparkles className="w-8 h-8 text-white" />
+                     </div>
+                     <div className="h-16 w-16 bg-gradient-to-br from-[#1E3A8A] to-[#1E3A8A]/80 rounded-full animate-bounce flex items-center justify-center" style={{ animationDelay: '0.6s' }}>
+                       <Zap className="w-8 h-8 text-white" />
+                     </div>
                   </div>
                 </div>
                 
-                <h3 className="text-3xl font-bold text-yellow-400 mb-3 animate-pulse relative z-10">
-                  Welcome to the Upside Down!
+                 <h3 className="text-4xl font-black text-[#F6F9FF] mb-4 animate-pulse relative z-10" style={{ 
+                   textShadow: '0 0 30px rgba(255,255,255,0.8), 0 0 60px rgba(201, 111, 99, 0.6)'
+                 }}>
+                   Welcome to INNOSTRA!
                 </h3>
-                <p className="text-purple-300 text-xl mb-4 relative z-10">
-                  Registration successful! You're now part of Wisteria '25
-                </p>
-                
-                {/* Enhanced Particle Effects */}
-                <div className="mt-6 flex justify-center space-x-3 relative z-10">
-                  <div className="w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
-                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-ping" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-ping" style={{ animationDelay: '0.4s' }}></div>
-                  <div className="w-3 h-3 bg-purple-500 rounded-full animate-ping" style={{ animationDelay: '0.6s' }}></div>
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full animate-ping" style={{ animationDelay: '0.8s' }}></div>
-                </div>
-                
-                                 {/* Floating Characters - Desktop */}
-                 <div className="hidden md:block absolute top-0 left-0 w-full h-full pointer-events-none">
-                   <div className="absolute top-4 left-4 animate-float">
-                     <Ghost className="w-6 h-6 text-purple-400 opacity-60" />
-                   </div>
-                   <div className="absolute top-8 right-8 animate-float" style={{ animationDelay: '0.5s' }}>
-                     <Zap className="w-5 h-5 text-yellow-400 opacity-70" />
-                   </div>
-                   <div className="absolute bottom-4 left-8 animate-float" style={{ animationDelay: '1s' }}>
-                     <Eye className="w-4 h-4 text-red-400 opacity-50" />
-                   </div>
-                 </div>
+                 <p className="text-[#F6F9FF]/80 text-xl mb-6 relative z-10">
+                   Registration successful! You're now part of the galaxy of innovation
+                 </p>
                  
-                 {/* Floating Characters - Mobile */}
-                 <div className="md:hidden absolute top-0 left-0 w-full h-full pointer-events-none">
-                   <div className="absolute top-2 left-2 animate-float">
-                     <Ghost className="w-4 h-4 text-purple-400 opacity-70" />
-                   </div>
-                   <div className="absolute top-4 right-4 animate-float" style={{ animationDelay: '0.5s' }}>
-                     <Zap className="w-3 h-3 text-yellow-400 opacity-80" />
-                   </div>
-                   <div className="absolute bottom-2 left-4 animate-float" style={{ animationDelay: '1s' }}>
-                     <Eye className="w-3 h-3 text-red-400 opacity-60" />
-                   </div>
-                   <div className="absolute top-1/2 right-2 animate-float" style={{ animationDelay: '1.5s' }}>
-                     <Star className="w-2 h-2 text-blue-400 opacity-50" />
-                   </div>
-                 </div>
+                 {/* Stellar Particle Effects */}
+                 <div className="mt-8 flex justify-center space-x-4 relative z-10">
+                   <div className="w-4 h-4 bg-[#C96F63] rounded-full animate-ping"></div>
+                   <div className="w-4 h-4 bg-[#FFCC66] rounded-full animate-ping" style={{ animationDelay: '0.2s' }}></div>
+                   <div className="w-4 h-4 bg-[#1E3A8A] rounded-full animate-ping" style={{ animationDelay: '0.4s' }}></div>
+                   <div className="w-4 h-4 bg-[#C96F63] rounded-full animate-ping" style={{ animationDelay: '0.6s' }}></div>
+                   <div className="w-4 h-4 bg-[#FFCC66] rounded-full animate-ping" style={{ animationDelay: '0.8s' }}></div>
+                </div>
               </div>
             </div>
           )}
 
-          <div className="bg-gradient-to-br from-gray-900 via-purple-900 to-red-900 px-4 pt-4 pb-3 md:px-6 md:pt-6 md:pb-4 lg:p-8 lg:pb-6 relative">
+          <div className="bg-gradient-to-br from-[#07021A] via-[#0B1536] to-[#0B0412] px-4 pt-4 pb-3 md:px-6 md:pt-6 md:pb-4 lg:p-8 lg:pb-6 relative">
             {/* Header Background Effects */}
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-red-500 to-blue-500"></div>
+            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-[#C96F63] via-[#FFCC66] to-[#1E3A8A]"></div>
             
             <div className="flex justify-between items-center mb-6 relative">
               <div className="flex items-center space-x-2 md:space-x-3">
                 <div className="relative">
-                  <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-purple-600 to-red-600 rounded-full flex items-center justify-center animate-pulse">
-                    <Skull className="w-4 h-4 md:w-6 md:h-6 text-white" />
+                  <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-[#C96F63] to-[#C96F63]/80 rounded-full flex items-center justify-center animate-pulse">
+                    <Star className="w-4 h-4 md:w-6 md:h-6 text-white" />
                   </div>
-                  <div className="absolute -top-1 -right-1 w-3 h-3 md:w-4 md:h-4 bg-yellow-400 rounded-full animate-ping"></div>
+                  <div className="absolute -top-1 -right-1 w-3 h-3 md:w-4 md:h-4 bg-[#FFCC66] rounded-full animate-ping"></div>
                 </div>
-                <div>
-                  <h3 className="text-lg md:text-2xl font-bold text-white">
-                    <span className="text-red-400">Register</span> Participant
+                <div className="relative">
+                  <h3 className="text-lg md:text-2xl font-bold text-[#F6F9FF]">
+                    <span className="text-[#C96F63]">Register</span> Participant
                   </h3>
-                  <p className="text-purple-300 text-xs md:text-sm">Enter the Upside Down of Wisteria '25</p>
+                  <p className="text-[#F6F9FF]/60 text-xs md:text-sm">Join the galaxy of innovation at INNOSTRA'25</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-red-400 transition-colors p-1 md:p-2 rounded-full hover:bg-red-500/20"
+                className="text-[#F6F9FF]/60 hover:text-[#C96F63] transition-colors p-1 md:p-2 rounded-full hover:bg-[#C96F63]/20"
               >
                 <X className="h-5 w-5 md:h-6 md:w-6" />
               </button>
@@ -845,7 +961,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
               {/* Basic Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                  <label className="block text-sm font-medium text-[#F6F9FF]">
                     Name *
                   </label>
                   <input
@@ -854,12 +970,12 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className="mt-1 block w-full border border-purple-500/50 rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white placeholder-gray-400"
+                    className="mt-1 block w-full border border-[#C96F63]/30 rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                   <label className="block text-sm font-medium text-[#F6F9FF]">
                     Email *
                   </label>
                   <div className="relative">
@@ -869,13 +985,13 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       value={formData.email}
                       onChange={handleInputChange}
                       required
-                      className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white placeholder-gray-400 ${
-                        validationErrors.email ? 'border-red-500' : 'border-purple-500/50'
+                       className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
+                         validationErrors.email ? 'border-red-500' : 'border-[#C96F63]/30'
                       }`}
                     />
                     {isValidating.email && (
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#C96F63]"></div>
                       </div>
                     )}
                     {validationErrors.email && (
@@ -890,7 +1006,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                   <label className="block text-sm font-medium text-[#F6F9FF]">
                     Phone Number *
                   </label>
                   <div className="relative">
@@ -900,13 +1016,13 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       value={formData.phone}
                       onChange={handleInputChange}
                       required
-                      className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white placeholder-gray-400 ${
-                        validationErrors.phone ? 'border-red-500' : 'border-purple-500/50'
+                       className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
+                         validationErrors.phone ? 'border-red-500' : 'border-[#C96F63]/30'
                       }`}
                     />
                     {isValidating.phone && (
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#C96F63]"></div>
                       </div>
                     )}
                     {validationErrors.phone && (
@@ -921,7 +1037,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                   <label className="block text-sm font-medium text-[#F6F9FF]">
                     Enrollment Number *
                   </label>
                   <div className="relative">
@@ -931,13 +1047,13 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       value={formData.enrollment_number}
                       onChange={handleInputChange}
                       required
-                      className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white placeholder-gray-400 ${
-                        validationErrors.enrollment_number ? 'border-red-500' : 'border-purple-500/50'
+                       className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
+                         validationErrors.enrollment_number ? 'border-red-500' : 'border-[#C96F63]/30'
                       }`}
                     />
                     {isValidating.enrollment_number && (
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#C96F63]"></div>
                       </div>
                     )}
                     {validationErrors.enrollment_number && (
@@ -952,7 +1068,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                   <label className="block text-sm font-medium text-[#F6F9FF]">
                     College *
                   </label>
                   <select
@@ -960,11 +1076,14 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                     value={formData.college_id}
                     onChange={handleInputChange}
                     required
-                    className="mt-1 block w-full border border-purple-500/50 rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white"
+                     className="mt-1 block w-full border border-[#C96F63]/30 rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] backdrop-blur-sm"
+                     style={{
+                       colorScheme: 'dark'
+                     }}
                   >
-                    <option value="">Select College</option>
+                     <option value="" className="bg-[#0B1536] text-[#F6F9FF]">Select College</option>
                     {colleges.map(college => (
-                      <option key={college.id} value={college.id}>
+                       <option key={college.id} value={college.id} className="bg-[#0B1536] text-[#F6F9FF]">
                         {college.name}
                       </option>
                     ))}
@@ -972,7 +1091,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 </div>
 
                                  <div>
-                   <label className="block text-sm font-medium text-purple-300">
+                    <label className="block text-sm font-medium text-[#F6F9FF]">
                      Field *
                    </label>
                    <select
@@ -980,11 +1099,14 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                      value={formData.field_id}
                      onChange={handleInputChange}
                      required
-                     className="mt-1 block w-full border border-purple-500/50 rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white"
+                       className="mt-1 block w-full border border-[#C96F63]/30 rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] backdrop-blur-sm"
+                       style={{
+                         colorScheme: 'dark'
+                       }}
                    >
-                     <option value="">Select Field</option>
+                       <option value="" className="bg-[#0B1536] text-[#F6F9FF]">Select Field</option>
                      {fields.map(field => (
-                       <option key={field.id} value={field.id}>
+                         <option key={field.id} value={field.id} className="bg-[#0B1536] text-[#F6F9FF]">
                          {field.name}
                        </option>
                      ))}
@@ -992,7 +1114,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                  </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                   <label className="block text-sm font-medium text-[#F6F9FF]">
                     Semester *
                   </label>
                   <select
@@ -1000,11 +1122,14 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                     value={formData.semester}
                     onChange={handleInputChange}
                     required
-                    className="mt-1 block w-full border border-purple-500/50 rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white"
+                     className="mt-1 block w-full border border-[#C96F63]/30 rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] backdrop-blur-sm"
+                     style={{
+                       colorScheme: 'dark'
+                     }}
                   >
-                    <option value="">Select Semester</option>
+                     <option value="" className="bg-[#0B1536] text-[#F6F9FF]">Select Semester</option>
                     {semesterOptions.map(semester => (
-                      <option key={semester.value} value={semester.value}>
+                       <option key={semester.value} value={semester.value} className="bg-[#0B1536] text-[#F6F9FF]">
                         {semester.label}
                       </option>
                     ))}
@@ -1012,8 +1137,8 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
-                    Profile Photo
+                   <label className="block text-sm font-medium text-[#F6F9FF]">
+                   Upload ID Card OR Photo
                   </label>
                   <div className="mt-1 flex items-center">
                     <input
@@ -1025,17 +1150,28 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                     />
                     <label
                       htmlFor="photo-upload"
-                      className="cursor-pointer inline-flex items-center px-4 py-2 border border-purple-500/50 rounded-md shadow-sm text-sm font-medium text-purple-300 bg-gray-800 hover:bg-gray-700 transition-colors"
-                    >
+                        className={`cursor-pointer inline-flex items-center px-4 py-2 border border-[#C96F63]/30 rounded-md shadow-sm text-sm font-medium text-[#F6F9FF] bg-[#0B1536]/50 hover:bg-[#0B1536]/70 transition-colors backdrop-blur-sm ${
+                          uploadingPhoto ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                     >
+                       {uploadingPhoto ? (
+                         <>
+                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#C96F63] mr-2"></div>
+                           Uploading...
+                         </>
+                       ) : (
+                         <>
                       <Upload className="h-4 w-4 mr-2" />
-                      Upload Photo
+                      Upload ID Card OR Photo
+                         </>
+                       )}
                     </label>
                   </div>
                   {formData.photo_url && (
                     <img
                       src={formData.photo_url}
                       alt="Profile Preview"
-                      className="mt-2 h-20 w-20 object-cover rounded-md border border-purple-500/50"
+                       className="mt-2 h-20 w-20 object-cover rounded-md border border-[#C96F63]/30"
                     />
                   )}
                 </div>
@@ -1045,33 +1181,33 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Technical Events */}
                 <div>
-                  <label className="block text-sm font-medium text-purple-300 mb-2">
+                   <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
                     Technical Events ({formData.selected_tech_events.length} selected)
                   </label>
-                  <div className="max-h-48 overflow-y-auto border border-purple-500/50 rounded-md p-3 bg-gray-800/50">
+                   <div className="max-h-48 overflow-y-auto border border-[#C96F63]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
                     {events.filter(e => e.category === 'tech').map(event => {
                       const isDisabled = isEventInSelectedCombo(event.id)
                       return (
                         <label key={event.id} className={`flex items-center space-x-3 py-2 rounded px-2 ${
-                          isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-700/50 cursor-pointer'
+                           isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#0B1536]/50 cursor-pointer'
                         }`}>
                           <input
                             type="checkbox"
                             checked={formData.selected_tech_events.includes(event.id)}
                             onChange={(e) => handleEventChange(event.id, 'tech', e.target.checked)}
                             disabled={isDisabled}
-                            className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                             className="h-4 w-4 text-[#C96F63] focus:ring-[#C96F63] border-[#C96F63]/30 rounded"
                           />
                           {isDisabled && (
-                            <span className="text-xs text-gray-400 ml-2">
+                             <span className="text-xs text-[#F6F9FF]/60 ml-2">
                               (Part of selected combo)
                             </span>
                           )}
                           <div className="flex-1">
-                            <span className="text-sm font-medium text-white">
+                             <span className="text-sm font-medium text-[#F6F9FF]">
                               {event.name}
                             </span>
-                            <span className="text-sm text-purple-300 ml-2">
+                             <span className="text-sm text-[#C96F63] ml-2">
                               ₹{event.price || 0}
                             </span>
                           </div>
@@ -1083,33 +1219,33 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
 
                 {/* Non-Technical Events */}
                 <div>
-                  <label className="block text-sm font-medium text-purple-300 mb-2">
+                   <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
                     Non-Technical Events ({formData.selected_non_tech_events.length} selected)
                   </label>
-                  <div className="max-h-48 overflow-y-auto border border-purple-500/50 rounded-md p-3 bg-gray-800/50">
+                   <div className="max-h-48 overflow-y-auto border border-[#FFCC66]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
                     {events.filter(e => e.category === 'non-tech').map(event => {
                       const isDisabled = isEventInSelectedCombo(event.id)
                       return (
                         <label key={event.id} className={`flex items-center space-x-3 py-2 rounded px-2 ${
-                          isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-700/50 cursor-pointer'
+                           isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#0B1536]/50 cursor-pointer'
                         }`}>
                           <input
                             type="checkbox"
                             checked={formData.selected_non_tech_events.includes(event.id)}
                             onChange={(e) => handleEventChange(event.id, 'non-tech', e.target.checked)}
                             disabled={isDisabled}
-                            className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                             className="h-4 w-4 text-[#FFCC66] focus:ring-[#FFCC66] border-[#FFCC66]/30 rounded"
                           />
                           {isDisabled && (
-                            <span className="text-xs text-gray-400 ml-2">
+                             <span className="text-xs text-[#F6F9FF]/60 ml-2">
                               (Part of selected combo)
                             </span>
                           )}
                           <div className="flex-1">
-                            <span className="text-sm font-medium text-white">
+                             <span className="text-sm font-medium text-[#F6F9FF]">
                               {event.name}
                             </span>
-                            <span className="text-sm text-green-300 ml-2">
+                             <span className="text-sm text-[#FFCC66] ml-2">
                               ₹{event.price || 0}
                             </span>
                           </div>
@@ -1121,33 +1257,33 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
 
                 {/* Workshops */}
                 <div>
-                  <label className="block text-sm font-medium text-purple-300 mb-2">
+                   <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
                     Workshops ({formData.selected_workshops.length} selected)
                   </label>
-                  <div className="max-h-48 overflow-y-auto border border-purple-500/50 rounded-md p-3 bg-gray-800/50">
+                   <div className="max-h-48 overflow-y-auto border border-[#1E3A8A]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
                     {workshops.map(workshop => {
                       const isDisabled = isWorkshopInSelectedCombo(workshop.id)
                       return (
                         <label key={workshop.id} className={`flex items-center space-x-3 py-2 rounded px-2 ${
-                          isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-700/50 cursor-pointer'
+                           isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#0B1536]/50 cursor-pointer'
                         }`}>
                           <input
                             type="checkbox"
                             checked={formData.selected_workshops.includes(workshop.id)}
                             onChange={(e) => handleWorkshopChange(workshop.id, e.target.checked)}
                             disabled={isDisabled}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                             className="h-4 w-4 text-[#1E3A8A] focus:ring-[#1E3A8A] border-[#1E3A8A]/30 rounded"
                           />
                           {isDisabled && (
-                            <span className="text-xs text-gray-400 ml-2">
+                             <span className="text-xs text-[#F6F9FF]/60 ml-2">
                               (Part of selected combo)
                             </span>
                           )}
                           <div className="flex-1">
-                            <span className="text-sm font-medium text-white">
+                             <span className="text-sm font-medium text-[#F6F9FF]">
                               {workshop.title}
                             </span>
-                            <span className="text-sm text-blue-300 ml-2">
+                             <span className="text-sm text-[#1E3A8A] ml-2">
                               ₹{workshop.fee || 0}
                             </span>
                           </div>
@@ -1159,24 +1295,24 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
 
                 {/* Combos */}
                 <div>
-                  <label className="block text-sm font-medium text-purple-300 mb-2">
+                   <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
                     Combos ({formData.selected_combos.length} selected)
                   </label>
-                  <div className="max-h-48 overflow-y-auto border border-purple-500/50 rounded-md p-3 bg-gray-800/50">
+                   <div className="max-h-48 overflow-y-auto border border-[#C96F63]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
                     {combos.map(combo => (
-                      <label key={combo.id} className="flex items-center space-x-3 py-2 hover:bg-gray-700/50 rounded px-2 cursor-pointer">
+                                             <label key={combo.id} className="flex items-center space-x-3 py-2 hover:bg-[#0B1536]/50 rounded px-2 cursor-pointer">
                         <input
                           type="radio"
                           name="combo"
                           checked={formData.selected_combos.includes(combo.id)}
                           onChange={(e) => handleComboChange(combo.id, e.target.checked)}
-                          className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300"
+                           className="h-4 w-4 text-[#C96F63] focus:ring-[#C96F63] border-[#C96F63]/30"
                         />
                         <div className="flex-1">
-                          <span className="text-sm font-medium text-white">
+                           <span className="text-sm font-medium text-[#F6F9FF]">
                             {combo.name}
                           </span>
-                          <span className="text-sm text-orange-300 ml-2">
+                           <span className="text-sm text-[#C96F63] ml-2">
                             ₹{combo.price || 0}
                           </span>
                         </div>
@@ -1188,55 +1324,55 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
 
               {/* Selection Summary */}
               <div>
-                <label className="block text-sm font-medium text-purple-300 mb-2">
+                 <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
                   Selection Summary
                 </label>
-                <div className="p-3 bg-gray-800/50 rounded-md border border-purple-500/50">
+                 <div className="p-3 bg-[#0B1536]/30 rounded-md border border-[#C96F63]/30 backdrop-blur-sm">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                     <div>
-                      <span className="font-medium text-purple-300">Technical Events:</span>
+                       <span className="font-medium text-[#C96F63]">Technical Events:</span>
                       <ul className="mt-1 space-y-1">
                         {formData.selected_tech_events.map(eventId => {
                           const event = events.find(e => e.id === eventId)
                           return event ? (
                             <li key={eventId} className="flex justify-between">
-                              <span className="text-white">{event.name}</span>
-                              <span className="font-medium text-purple-300">₹{event.price || 0}</span>
+                               <span className="text-[#F6F9FF]">{event.name}</span>
+                               <span className="font-medium text-[#C96F63]">₹{event.price || 0}</span>
                             </li>
                           ) : null
                         })}
                       </ul>
                     </div>
                     <div>
-                      <span className="font-medium text-green-300">Non-Technical Events:</span>
+                       <span className="font-medium text-[#FFCC66]">Non-Technical Events:</span>
                       <ul className="mt-1 space-y-1">
                         {formData.selected_non_tech_events.map(eventId => {
                           const event = events.find(e => e.id === eventId)
                           return event ? (
                             <li key={eventId} className="flex justify-between">
-                              <span className="text-white">{event.name}</span>
-                              <span className="font-medium text-green-300">₹{event.price || 0}</span>
+                               <span className="text-[#F6F9FF]">{event.name}</span>
+                               <span className="font-medium text-[#FFCC66]">₹{event.price || 0}</span>
                             </li>
                           ) : null
                         })}
                       </ul>
                     </div>
                     <div>
-                      <span className="font-medium text-blue-300">Workshops:</span>
+                       <span className="font-medium text-[#1E3A8A]">Workshops:</span>
                       <ul className="mt-1 space-y-1">
                         {formData.selected_workshops.map(workshopId => {
                           const workshop = workshops.find(w => w.id === workshopId)
                           return workshop ? (
                             <li key={workshopId} className="flex justify-between">
-                              <span className="text-white">{workshop.title}</span>
-                              <span className="font-medium text-blue-300">₹{workshop.fee || 0}</span>
+                               <span className="text-[#F6F9FF]">{workshop.title}</span>
+                               <span className="font-medium text-[#1E3A8A]">₹{workshop.fee || 0}</span>
                             </li>
                           ) : null
                         })}
                       </ul>
                     </div>
                     <div>
-                      <span className="font-medium text-orange-300">Combos:</span>
+                       <span className="font-medium text-[#C96F63]">Combos:</span>
                       <ul className="mt-1 space-y-1">
                         {formData.selected_combos.map(comboId => {
                           const combo = combos.find(c => c.id === comboId)
@@ -1244,21 +1380,21 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                           return combo ? (
                             <li key={comboId} className="space-y-1">
                               <div className="flex justify-between">
-                                <span className="text-white font-medium">{combo.name}</span>
-                                <span className="font-medium text-orange-300">₹{combo.price || 0}</span>
+                                 <span className="text-[#F6F9FF] font-medium">{combo.name}</span>
+                                 <span className="font-medium text-[#C96F63]">₹{combo.price || 0}</span>
                               </div>
                               {(comboDetails.events.length > 0 || comboDetails.workshops.length > 0) && (
                                 <ul className="ml-4 space-y-1 text-xs">
                                   {comboDetails.events.map(event => (
-                                    <li key={event.id} className="flex justify-between text-gray-300">
+                                     <li key={event.id} className="flex justify-between text-[#F6F9FF]/60">
                                       <span>• {event.name}</span>
-                                      <span className="text-gray-400">(included)</span>
+                                       <span className="text-[#F6F9FF]/40">(included)</span>
                                     </li>
                                   ))}
                                   {comboDetails.workshops.map(workshop => (
-                                    <li key={workshop.id} className="flex justify-between text-gray-300">
+                                     <li key={workshop.id} className="flex justify-between text-[#F6F9FF]/60">
                                       <span>• {workshop.title}</span>
-                                      <span className="text-gray-400">(included)</span>
+                                       <span className="text-[#F6F9FF]/40">(included)</span>
                                     </li>
                                   ))}
                                 </ul>
@@ -1269,19 +1405,114 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       </ul>
                     </div>
                   </div>
-                  <div className="border-t border-purple-500/50 pt-2 mt-2">
+                                     <div className="border-t border-[#C96F63]/30 pt-2 mt-2">
                     <div className="flex justify-between text-sm font-bold">
-                      <span className="text-yellow-400">Total:</span>
-                      <span className="text-yellow-400">₹{calculateTotalPrice().toFixed(2)}</span>
+                       <span className="text-[#FFCC66]">Total:</span>
+                       <span className="text-[#FFCC66]">₹{calculateTotalPrice().toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Payment Information */}
+               <div className="space-y-6">
+                 {/* Payment Method Selection */}
+                 <div>
+                   <label className="block text-sm font-medium text-[#F6F9FF] mb-3">
+                     Payment Method *
+                   </label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <label className={`relative cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                       formData.payment_method === 'online' 
+                         ? 'border-[#C96F63] bg-[#0B1536]/50' 
+                         : 'border-[#C96F63]/30 bg-[#0B1536]/30'
+                     } backdrop-blur-sm`}>
+                       <input
+                         type="radio"
+                         name="payment_method"
+                         value="online"
+                         checked={formData.payment_method === 'online'}
+                         onChange={() => handlePaymentMethodChange('online')}
+                         className="sr-only"
+                       />
+                       <div className="flex items-center space-x-3">
+                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                           formData.payment_method === 'online' 
+                             ? 'border-[#C96F63] bg-[#C96F63]' 
+                             : 'border-[#C96F63]/30'
+                         }`}>
+                           {formData.payment_method === 'online' && (
+                             <div className="w-2 h-2 bg-white rounded-full"></div>
+                           )}
+                         </div>
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                           <div className="font-medium text-[#F6F9FF]">Online Payment</div>
+                           <div className="text-sm text-[#F6F9FF]/60">Pay via UPI/Net Banking</div>
+                         </div>
+                       </div>
+                     </label>
+
+                     <label className={`relative cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                       formData.payment_method === 'cash' 
+                         ? 'border-[#C96F63] bg-[#0B1536]/50' 
+                         : 'border-[#C96F63]/30 bg-[#0B1536]/30'
+                     } backdrop-blur-sm`}>
+                       <input
+                         type="radio"
+                         name="payment_method"
+                         value="cash"
+                         checked={formData.payment_method === 'cash'}
+                         onChange={() => handlePaymentMethodChange('cash')}
+                         className="sr-only"
+                       />
+                       <div className="flex items-center space-x-3">
+                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                           formData.payment_method === 'cash' 
+                             ? 'border-[#C96F63] bg-[#C96F63]' 
+                             : 'border-[#C96F63]/30'
+                         }`}>
+                           {formData.payment_method === 'cash' && (
+                             <div className="w-2 h-2 bg-white rounded-full"></div>
+                           )}
+                         </div>
+                         <div>
+                           <div className="font-medium text-[#F6F9FF]">Cash Payment</div>
+                           <div className="text-sm text-[#F6F9FF]/60">Pay at the venue</div>
+                         </div>
+                       </div>
+                     </label>
+                   </div>
+                 </div>
+
+                 {/* QR Code for Online Payment */}
+                 {formData.payment_method === 'online' && (
+                   <div className="bg-[#0B1536]/30 rounded-lg border border-[#C96F63]/30 p-6 backdrop-blur-sm">
+                     <div className="text-center">
+                       <h4 className="text-lg font-medium text-[#F6F9FF] mb-3">Scan QR Code to Pay</h4>
+                       <p className="text-sm text-[#F6F9FF]/60 mb-4">
+                         Amount: ₹{calculateTotalPrice().toFixed(2)}
+                       </p>
+                       <div className="flex justify-center">
+                         <div className="bg-white p-4 rounded-lg shadow-lg">
+                           <img 
+                             src="/image/qr-code.png" 
+                             alt="Payment QR Code" 
+                             className="w-48 h-48 object-contain"
+                           />
+                         </div>
+                       </div>
+                       <p className="text-xs text-[#F6F9FF]/60 mt-3">
+                         After payment, enter the transaction ID below
+                       </p>
+                     </div>
+                   </div>
+                 )}
+
+                 {/* Transaction Details */}
+                 <div className="space-y-4">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-sm font-medium text-[#F6F9FF]">
                     Transaction ID *
                   </label>
                   <div className="relative">
@@ -1291,13 +1522,14 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       value={formData.transaction_id}
                       onChange={handleInputChange}
                       required
-                      className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white placeholder-gray-400 ${
-                        validationErrors.transaction_id ? 'border-red-500' : 'border-purple-500/50'
-                      }`}
+                         disabled={formData.payment_method === 'cash'}
+                         className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
+                           validationErrors.transaction_id ? 'border-red-500' : 'border-[#C96F63]/30'
+                         } ${formData.payment_method === 'cash' ? 'opacity-60 cursor-not-allowed' : ''}`}
                     />
                     {isValidating.transaction_id && (
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#C96F63]"></div>
                       </div>
                     )}
                     {validationErrors.transaction_id && (
@@ -1312,7 +1544,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-purple-300">
+                     <label className="block text-sm font-medium text-[#F6F9FF]">
                     Amount Paid *
                   </label>
                   <input
@@ -1321,19 +1553,24 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                     value={formData.amount_paid}
                     onChange={handleInputChange}
                     required
-                    className="mt-1 block w-full border border-purple-500/50 rounded-md px-3 py-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-gray-800 text-white placeholder-gray-400"
+                       disabled={formData.payment_method === 'cash'}
+                       className={`mt-1 block w-full border border-[#C96F63]/30 rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
+                         formData.payment_method === 'cash' ? 'opacity-60 cursor-not-allowed' : ''
+                       }`}
                   />
-                  <p className="mt-1 text-xs text-yellow-400">
+                     <p className="mt-1 text-xs text-[#FFCC66]">
                     Expected total: ₹{calculateTotalPrice().toFixed(2)}
                   </p>
+                                      </div>
+                 </div>
                 </div>
               </div>
             </form>
           </div>
 
-          <div className="bg-gray-800/90 px-4 py-3 md:px-6 md:py-4 lg:px-8 sm:flex sm:flex-row-reverse border-t-2 border-purple-500/50 relative">
+                     <div className="bg-[#0B1536]/90 px-4 py-3 md:px-6 md:py-4 lg:px-8 sm:flex sm:flex-row-reverse border-t border-[#C96F63]/30 relative backdrop-blur-sm">
             {/* Footer Background Effects */}
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-transparent to-red-500/10"></div>
+             <div className="absolute inset-0 bg-gradient-to-r from-[#C96F63]/10 via-transparent to-[#1E3A8A]/10"></div>
             
             <button
               type="submit"
@@ -1341,7 +1578,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
               disabled={!isFormValid() || loading}
               className={`relative w-full inline-flex justify-center rounded-lg border border-transparent shadow-lg px-4 py-2 md:px-6 md:py-3 text-sm md:text-base font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto transition-all transform hover:scale-105 ${
                 isFormValid() && !loading
-                  ? 'bg-gradient-to-r from-purple-600 via-red-600 to-purple-600 hover:from-purple-700 hover:via-red-700 hover:to-purple-700 focus:ring-purple-500 shadow-purple-500/50'
+                   ? 'bg-gradient-to-r from-[#C96F63] via-[#FFCC66] to-[#1E3A8A] hover:from-[#C96F63]/90 hover:via-[#FFCC66]/90 hover:to-[#1E3A8A]/90 focus:ring-[#C96F63] shadow-[#C96F63]/50'
                   : 'bg-gray-600 cursor-not-allowed'
               }`}
             >
@@ -1360,7 +1597,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
             <button
               type="button"
               onClick={onClose}
-              className="mt-3 w-full inline-flex justify-center rounded-lg border-2 border-purple-500/50 shadow-sm px-4 py-2 md:px-6 md:py-3 bg-gray-800 text-sm md:text-base font-medium text-purple-300 hover:bg-gray-700 hover:border-purple-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 sm:mt-0 sm:ml-3 sm:w-auto transition-all transform hover:scale-105"
+               className="mt-3 w-full inline-flex justify-center rounded-lg border-2 border-[#C96F63]/30 shadow-sm px-4 py-2 md:px-6 md:py-3 bg-[#0B1536]/50 text-sm md:text-base font-medium text-[#F6F9FF] hover:bg-[#0B1536]/70 hover:border-[#C96F63]/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#C96F63] sm:mt-0 sm:ml-3 sm:w-auto transition-all transform hover:scale-105 backdrop-blur-sm"
             >
               <X className="w-4 h-4 mr-2" />
               Cancel

@@ -44,7 +44,8 @@ const EventManager = () => {
     category: 'tech',
     handler_id: '',
     max_participants: null,
-    is_active: true
+    is_active: true,
+    created_at: ''
   })
 
   const [userFormData, setUserFormData] = useState({
@@ -126,9 +127,9 @@ const EventManager = () => {
               handler = handlerData
             }
 
-            // Fetch registrations/participations
+            // Fetch registrations/participations (direct + via combos that include this event)
             console.log('EventManager: Fetching participations for event:', event.id)
-            const { data: registrations } = await supabase
+            const { data: directRegs } = await supabase
               .from('registrations')
               .select(`
                 id, 
@@ -140,18 +141,52 @@ const EventManager = () => {
               .eq('target_type', 'event')
               .eq('target_id', event.id)
 
-            const registrationsList = registrations || []
-            const paidRegistrations = registrationsList.filter(reg => reg.payment_status === 'approved')
-            const unpaidRegistrations = registrationsList.filter(reg => reg.payment_status === 'pending')
+            // Find combos that include this event
+            const { data: comboItems, error: comboItemsError } = await supabase
+              .from('combo_items')
+              .select('combo_id')
+              .eq('target_type', 'event')
+              .eq('target_id', event.id)
+
+            let comboRegs = []
+            if (!comboItemsError && (comboItems?.length || 0) > 0) {
+              const comboIds = comboItems.map(ci => ci.combo_id)
+              const { data: comboRegsData } = await supabase
+                .from('registrations')
+                .select(`
+                  id,
+                  payment_status,
+                  amount_paid,
+                  created_at,
+                  users(id, name, email, phone, college_id, semester, field_id)
+                `)
+                .eq('target_type', 'combo')
+                .in('target_id', comboIds)
+              comboRegs = comboRegsData || []
+            }
+
+            const directWithType = (directRegs || []).map(r => ({ ...r, registrationType: 'Direct' }))
+            const comboWithType = (comboRegs || []).map(r => ({ ...r, registrationType: 'Combo' }))
+
+            // Merge and de-duplicate by user id
+            const mergedMap = new Map()
+            ;[...directWithType, ...comboWithType].forEach(r => {
+              const key = r.users?.id || r.id
+              if (!mergedMap.has(key)) mergedMap.set(key, r)
+            })
+            const mergedRegs = Array.from(mergedMap.values())
+
+            const paidRegistrations = mergedRegs.filter(reg => reg.payment_status === 'approved')
+            const unpaidRegistrations = mergedRegs.filter(reg => reg.payment_status === 'pending')
             
             return {
               ...event,
               handler,
-              participations: registrationsList,
-              totalRegistrations: registrationsList.length,
+              participations: mergedRegs,
+              totalRegistrations: mergedRegs.length,
               paidRegistrations: paidRegistrations.length,
               unpaidRegistrations: unpaidRegistrations.length,
-              remainingSeats: event.max_participants ? event.max_participants - registrationsList.length : null
+              remainingSeats: event.max_participants ? event.max_participants - mergedRegs.length : null
             }
           } catch (eventError) {
             console.error('EventManager: Error fetching details for event:', event.id, eventError)
@@ -238,9 +273,15 @@ const EventManager = () => {
 
       // Clean up empty string values for UUID fields
       const eventDataToSave = {
-        ...eventFormData,
+        name: eventFormData.name,
+        description: eventFormData.description,
         photo_url: photoUrl,
-        handler_id: eventFormData.handler_id || null
+        price: eventFormData.price,
+        category: eventFormData.category,
+        handler_id: eventFormData.handler_id || null,
+        max_participants: eventFormData.max_participants,
+        is_active: eventFormData.is_active,
+        created_at: eventFormData.event_date ? new Date(eventFormData.event_date).toISOString() : new Date().toISOString()
       }
 
       if (editingEvent) {
@@ -327,7 +368,8 @@ const EventManager = () => {
       category: event.category || 'tech',
       handler_id: event.handler_id || '',
       max_participants: event.max_participants || null,
-      is_active: event.is_active
+      is_active: event.is_active,
+      event_date: event.created_at ? new Date(event.created_at).toISOString().split('T')[0] : ''
     })
     setShowEventModal(true)
   }
@@ -415,7 +457,8 @@ const EventManager = () => {
       category: 'tech',
       handler_id: '',
       max_participants: null,
-      is_active: true
+      is_active: true,
+      event_date: ''
     })
   }
 
@@ -847,6 +890,19 @@ const EventManager = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Event Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={eventFormData.event_date}
+                    onChange={(e) => setEventFormData(prev => ({ ...prev, event_date: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+
                                  <div>
                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                      Event Photo
@@ -1210,6 +1266,9 @@ const EventManager = () => {
                         Contact
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Registration Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                         Payment Status
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -1235,6 +1294,15 @@ const EventManager = () => {
                           <div className="text-sm text-gray-500 dark:text-gray-400">
                             {participation.users?.phone || 'N/A'}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            participation.registrationType === 'Combo'
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                          }`}>
+                            {participation.registrationType || 'Direct'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${

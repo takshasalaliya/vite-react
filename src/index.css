@@ -1,4 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,11 +8,21 @@
 
 @layer base {
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Poppins', 'Inter', system-ui, sans-serif;
   }
   
   body {
     @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Montserrat', 'Poppins', sans-serif;
+  }
+  
+  /* Ensure no scrolling on home page */
+  .no-scroll {
+    overflow: hidden;
+    height: 100vh;
   }
 }
 
@@ -151,6 +163,51 @@
 
 .animate-tree-sway {
   animation: treeSway 8s ease-in-out infinite;
+}
+
+@keyframes tentacleWave {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-10px) rotate(5deg); }
+  50% { transform: translateY(-5px) rotate(-3deg); }
+  75% { transform: translateY(-15px) rotate(8deg); }
+}
+
+@keyframes handGrab {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.1) rotate(5deg); }
+  50% { transform: scale(0.9) rotate(-3deg); }
+  75% { transform: scale(1.05) rotate(8deg); }
+}
+
+@keyframes mindFlayerPulse {
+  0%, 100% { 
+    opacity: 0.3; 
+    transform: scale(1) rotate(0deg); 
+  }
+  25% { 
+    opacity: 0.5; 
+    transform: scale(1.05) rotate(2deg); 
+  }
+  50% { 
+    opacity: 0.4; 
+    transform: scale(0.95) rotate(-1deg); 
+  }
+  75% { 
+    opacity: 0.6; 
+    transform: scale(1.1) rotate(3deg); 
+  }
+}
+
+.animate-tentacle-wave {
+  animation: tentacleWave 6s ease-in-out infinite;
+}
+
+.animate-hand-grab {
+  animation: handGrab 4s ease-in-out infinite;
+}
+
+.animate-mind-flayer-pulse {
+  animation: mindFlayerPulse 8s ease-in-out infinite;
 }
 
 /* Gradient Radial Background */
@@ -527,6 +584,16 @@
   100% { transform: translateX(-100%); }
 }
 
+/* INNOSTRA Theme Animations */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-marquee {
+  animation: marquee 25s linear infinite;
+}
+
 /* Vignette and rifts */
 .vignette::before {
   content: '';
@@ -575,3 +642,25 @@
   background: rgba(239,68,68,.95);
   box-shadow: 0 0 12px rgba(239,68,68,.8);
 }
+
+/* Additional Stranger Things Animations */
+@keyframes spin-slow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes float-delayed {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-15px) rotate(3deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 4s ease-in-out infinite;
+}
+
+/* Stranger Things Image Styling - Remove White Backgrounds */
+

@@ -10,15 +10,20 @@ import {
   CheckCircle,
   XCircle,
   Eye,
-  Filter
+  Filter,
+  Plus,
+  User,
+  X
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useAuth } from '../contexts/AuthContext'
+import UserQRCode from '../components/UserQRCode'
 
 const Attendance = () => {
   const [attendanceLogs, setAttendanceLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  const [processingScan, setProcessingScan] = useState(false)
   const [selectedTargets, setSelectedTargets] = useState([])
   const [events, setEvents] = useState([])
   const [workshops, setWorkshops] = useState([])
@@ -29,6 +34,12 @@ const Attendance = () => {
   const [pageSize] = useState(10)
   const [scanResult, setScanResult] = useState(null)
   const [showScanModal, setShowScanModal] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [users, setUsers] = useState([])
+  const [searchUser, setSearchUser] = useState('')
+  const [scanSessionCount, setScanSessionCount] = useState(0)
+  const [lastUpdate, setLastUpdate] = useState(new Date())
   
   const scannerRef = useRef(null)
   const qrScannerRef = useRef(null)
@@ -37,19 +48,47 @@ const Attendance = () => {
   useEffect(() => {
     fetchAttendanceLogs()
     fetchTargets()
+    fetchUsers()
 
-    // realtime subscription for attendance table
-    const channel = supabase
-      .channel('attendance_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
-        fetchAttendanceLogs()
-      })
-      .subscribe()
+         // realtime subscription for attendance table
+     const channel = supabase
+       .channel('attendance_changes')
+       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
+         fetchAttendanceLogs()
+         setLastUpdate(new Date())
+       })
+       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [currentPage, searchTerm, dateRange])
+  }, [currentPage, searchTerm, dateRange, selectedTargets])
+
+  // Initialize scanner when modal opens
+  useEffect(() => {
+    if (showScanModal && scanning) {
+      const timer = setTimeout(() => {
+        try {
+          if (qrScannerRef.current) {
+            qrScannerRef.current = new Html5QrcodeScanner(
+              "qr-reader",
+              { fps: 10, qrbox: { width: 250, height: 250 } },
+              false
+            )
+            qrScannerRef.current.render(onScanSuccess, onScanFailure)
+          }
+        } catch (error) {
+          console.error('Error initializing scanner:', error)
+          setScanResult({
+            success: false,
+            message: 'Failed to initialize scanner. Please try again.'
+          })
+        }
+      }, 500) // Give modal time to render
+
+      return () => clearTimeout(timer)
+    }
+  }, [showScanModal, scanning])
 
   const fetchAttendanceLogs = async () => {
     try {
@@ -58,16 +97,9 @@ const Attendance = () => {
       let query = supabase
         .from('attendance')
         .select(`
-          *,
-          users!inner(name, email, enrollment_number),
-          events!inner(name),
-          workshops!inner(title)
+          id, user_id, target_type, target_id, scan_time, scanned_by
         `, { count: 'exact' })
         .order('scan_time', { ascending: false })
-
-      if (searchTerm) {
-        query = query.or(`users.name.ilike.%${searchTerm}%,users.email.ilike.%${searchTerm}%,users.enrollment_number.ilike.%${searchTerm}%`)
-      }
 
       if (dateRange.start) {
         query = query.gte('scan_time', dateRange.start)
@@ -77,6 +109,12 @@ const Attendance = () => {
         query = query.lte('scan_time', dateRange.end + 'T23:59:59')
       }
 
+      // If a specific target selection is made, constrain by those target IDs and types
+      if (selectedTargets && selectedTargets.length > 0) {
+        // For now, we'll filter on the client side after fetching the data
+        // This ensures we get all the data we need for proper filtering
+      }
+
       const from = (currentPage - 1) * pageSize
       const to = from + pageSize - 1
 
@@ -84,20 +122,45 @@ const Attendance = () => {
 
       if (error) throw error
 
-      // Process data to get target names
-      const processedLogs = data?.map(log => {
-        let targetName = ''
-        if (log.target_type === 'event' && log.events) {
-          targetName = log.events.name
-        } else if (log.target_type === 'workshop' && log.workshops) {
-          targetName = log.workshops.title
-        }
+      // Fetch target names
+      const eventIds = Array.from(new Set((data || []).filter(l => l.target_type === 'event').map(l => l.target_id)))
+      const workshopIds = Array.from(new Set((data || []).filter(l => l.target_type === 'workshop').map(l => l.target_id)))
+      const userIds = Array.from(new Set((data || []).map(l => l.user_id)))
 
-        return {
+      const [eventsRes, workshopsRes, usersRes] = await Promise.all([
+        eventIds.length ? supabase.from('events').select('id, name').in('id', eventIds) : Promise.resolve({ data: [] }),
+        workshopIds.length ? supabase.from('workshops').select('id, title').in('id', workshopIds) : Promise.resolve({ data: [] }),
+        userIds.length ? supabase.from('users').select('id, name, email, enrollment_number').in('id', userIds) : Promise.resolve({ data: [] })
+      ])
+
+      const eventsMap = new Map((eventsRes.data || []).map(e => [e.id, e.name]))
+      const workshopsMap = new Map((workshopsRes.data || []).map(w => [w.id, w.title]))
+      const usersMap = new Map((usersRes.data || []).map(u => [u.id, u]))
+
+      let processedLogs = (data || []).map(log => ({
           ...log,
-          targetName
-        }
-      }) || []
+        users: usersMap.get(log.user_id) || null,
+        targetName: log.target_type === 'event' ? (eventsMap.get(log.target_id) || '') : (workshopsMap.get(log.target_id) || '')
+      }))
+
+      // Client-side search
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        processedLogs = processedLogs.filter(l => (
+          (l.users?.name || '').toLowerCase().includes(term) ||
+          (l.users?.email || '').toLowerCase().includes(term) ||
+          (l.users?.enrollment_number || '').toLowerCase().includes(term)
+        ))
+      }
+
+      // Client-side target filtering
+      if (selectedTargets && selectedTargets.length > 0) {
+        processedLogs = processedLogs.filter(l => 
+          selectedTargets.some(target => 
+            target.id === l.target_id && target.type === l.target_type
+          )
+        )
+      }
 
       setAttendanceLogs(processedLogs)
       setTotalPages(Math.ceil((count || 0) / pageSize))
@@ -130,6 +193,21 @@ const Attendance = () => {
     }
   }
 
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email, photo_url, enrollment_number')
+        .eq('role', 'participant')
+        .order('name')
+
+      if (error) throw error
+      setUsers(data || [])
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    }
+  }
+
   const startScanning = () => {
     if (!isScannerCommittee) {
       alert('Only Scanner Committee users can scan QR codes.')
@@ -142,19 +220,24 @@ const Attendance = () => {
 
     setShowScanModal(true)
     setScanning(true)
-    
-    // Initialize QR scanner
-    setTimeout(() => {
-      if (qrScannerRef.current) {
-        qrScannerRef.current = new Html5QrcodeScanner(
-          "qr-reader",
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          false
-        )
+    setProcessingScan(false)
+    setScanResult(null) // Clear previous results
+    setScanSessionCount(0) // Reset session count
+  }
 
-        qrScannerRef.current.render(onScanSuccess, onScanFailure)
-      }
-    }, 100)
+  const openQRGenerator = () => {
+    setShowQRModal(true)
+    setSelectedUser(null)
+  }
+
+  const selectUserForQR = (user) => {
+    setSelectedUser(user)
+  }
+
+  const generateBulkQRCodes = () => {
+    // This would generate QR codes for all users
+    // For now, we'll just show a message
+    alert('Bulk QR code generation feature coming soon!')
   }
 
   const stopScanning = () => {
@@ -163,11 +246,21 @@ const Attendance = () => {
       qrScannerRef.current = null
     }
     setScanning(false)
+    setProcessingScan(false)
     setShowScanModal(false)
     setScanResult(null)
   }
 
   const onScanSuccess = async (decodedText, decodedResult) => {
+    // Prevent multiple simultaneous scans
+    if (!scanning || processingScan) {
+      return
+    }
+    
+    // Set processing state to prevent multiple scans
+    setProcessingScan(true)
+    setScanning(false)
+    
     try {
       // Parse QR code data
       let qrData
@@ -184,50 +277,136 @@ const Attendance = () => {
       }
 
       // Validate user has registration for selected targets
-      const registrations = await validateUserRegistrations(userId)
+      let registrations
+      try {
+        registrations = await validateUserRegistrations(userId)
+      } catch (validationError) {
+        setScanResult({
+          success: false,
+          message: validationError.message
+        })
+        return
+      }
       
       if (registrations.length === 0) {
         setScanResult({
           success: false,
-          message: 'User not registered for any selected targets'
+          message: 'User not eligible: No approved registrations for selected targets or event not currently active'
         })
         return
       }
 
       // Record attendance for each valid registration, prevent duplicates
       const currentUserId = authUser?.id || null
+      let attendanceRecorded = 0
+      let alreadyAttended = 0
+      let errors = []
 
       for (const reg of registrations) {
-        // Skip if already present
-        const { data: existing } = await supabase
-          .from('attendance')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('target_type', reg.target_type)
-          .eq('target_id', reg.target_id)
-          .limit(1)
-        if (existing && existing.length > 0) {
-          continue
-        }
+        try {
+          // First check if attendance already exists (double-check)
+          const { data: existingAttendance, error: checkError } = await supabase
+            .from('attendance')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('target_type', reg.target_type)
+            .eq('target_id', reg.target_id)
+            .limit(1)
 
-        await supabase
-          .from('attendance')
-          .insert([{ user_id: userId, target_type: reg.target_type, target_id: reg.target_id, scanned_by: currentUserId }])
+          if (checkError) {
+            errors.push(`Failed to check existing attendance for ${reg.target_name}: ${checkError.message}`)
+            continue
+          }
+
+          if (existingAttendance && existingAttendance.length > 0) {
+            alreadyAttended++
+            continue
+          }
+
+          // Double-check again after a small delay to prevent race conditions
+          await new Promise(resolve => setTimeout(resolve, 100))
+
+          const { data: doubleCheck, error: doubleCheckError } = await supabase
+            .from('attendance')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('target_type', reg.target_type)
+            .eq('target_id', reg.target_id)
+            .limit(1)
+
+          if (doubleCheckError) {
+            errors.push(`Failed to double-check existing attendance for ${reg.target_name}: ${doubleCheckError.message}`)
+            continue
+          }
+
+          if (doubleCheck && doubleCheck.length > 0) {
+            alreadyAttended++
+            continue
+          }
+
+          // Insert new attendance record
+          const { data, error } = await supabase
+            .from('attendance')
+            .insert([{ 
+              user_id: userId, 
+              target_type: reg.target_type, 
+              target_id: reg.target_id, 
+              scanned_by: currentUserId,
+              scan_time: new Date().toISOString()
+            }])
+
+          if (error) {
+            if (error.code === '23505') { // Unique constraint violation (fallback)
+              alreadyAttended++
+            } else {
+              errors.push(`Failed to record attendance for ${reg.target_name}: ${error.message}`)
+            }
+          } else if (data && data.length > 0) {
+            attendanceRecorded++
+          }
+        } catch (insertError) {
+          if (insertError.code === '23505') { // Unique constraint violation
+            alreadyAttended++
+          } else {
+            errors.push(`Failed to record attendance for ${reg.target_name}: ${insertError.message}`)
+          }
+        }
       }
 
-      setScanResult({
-        success: true,
-        message: `Attendance recorded for ${registrations.length} target(s)`,
-        user: registrations[0].user_name
-      })
+      // Prepare result message
+      let message = ''
+      if (attendanceRecorded > 0 && alreadyAttended > 0) {
+        message = `Attendance recorded for ${attendanceRecorded} target(s), ${alreadyAttended} already attended`
+      } else if (attendanceRecorded > 0) {
+        message = `Attendance recorded for ${attendanceRecorded} target(s)`
+      } else if (alreadyAttended > 0) {
+        message = `User already attended ${alreadyAttended} target(s)`
+      }
 
-      // Refresh attendance logs
-      fetchAttendanceLogs()
+      if (errors.length > 0) {
+        message += `. Errors: ${errors.join(', ')}`
+      }
 
-      // Stop scanning after successful scan
-      setTimeout(() => {
-        stopScanning()
-      }, 2000)
+             setScanResult({
+         success: attendanceRecorded > 0,
+         message: message,
+         user: registrations[0].user_name
+       })
+
+       // Increment session count if attendance was recorded
+       if (attendanceRecorded > 0) {
+         setScanSessionCount(prev => prev + 1)
+       }
+
+       // Refresh attendance logs
+       fetchAttendanceLogs()
+
+       // Keep scanner open for multiple scans, just reset the result after showing
+       setTimeout(() => {
+         setScanResult(null)
+         setProcessingScan(false)
+         setScanning(true) // Re-enable scanning for next user
+       }, 3000) // Show result for 3 seconds then reset
 
     } catch (error) {
       console.error('Error processing scan:', error)
@@ -245,27 +424,136 @@ const Attendance = () => {
 
   const validateUserRegistrations = async (userId) => {
     try {
-      const { data, error } = await supabase
+      // First, get user details
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, name, email, role, is_active')
+        .eq('id', userId)
+        .single()
+
+      if (userError || !userData) {
+        throw new Error('User not found')
+      }
+
+      if (!userData.is_active) {
+        throw new Error('User account is deactivated')
+      }
+
+      if (userData.role !== 'participant') {
+        throw new Error('User is not a participant')
+      }
+
+      // Get all registrations for user (events, workshops, combos)
+      const { data: regs, error } = await supabase
         .from('registrations')
-        .select(`*, users(name), events(name), workshops(title)`) // fetch minimal details
+        .select(`id, target_type, target_id, payment_status`)
         .eq('user_id', userId)
-        .eq('payment_status', 'approved')
 
       if (error) throw error
 
       const allowedPairs = new Set(selectedTargets.map(t => `${t.type}:${t.id}`))
 
-      return (data || [])
-        .filter(reg => allowedPairs.has(`${reg.target_type}:${reg.target_id}`))
-        .map(reg => ({
-          target_type: reg.target_type,
-          target_id: reg.target_id,
-          user_name: reg.users?.name || 'User',
-          target_name: reg.target_type === 'event' ? reg.events?.name : reg.workshops?.title
-        }))
+      const approvedRegs = (regs || []).filter(r => r.payment_status === 'approved')
+
+      // Separate direct and combo registrations
+      const directRegs = approvedRegs.filter(r => r.target_type === 'event' || r.target_type === 'workshop')
+      const comboRegs = approvedRegs.filter(r => r.target_type === 'combo')
+
+      // Expand combos into their included items
+      let expandedFromCombos = []
+      if (comboRegs.length > 0) {
+        const comboIds = Array.from(new Set(comboRegs.map(r => r.target_id)))
+        const { data: comboItems, error: ciErr } = await supabase
+          .from('combo_items')
+          .select('combo_id, target_type, target_id')
+          .in('combo_id', comboIds)
+        if (ciErr) throw ciErr
+        expandedFromCombos = comboItems || []
+      }
+
+      // Collect all target ids to fetch details for validation
+      const eventIds = Array.from(new Set([
+        ...directRegs.filter(r => r.target_type === 'event').map(r => r.target_id),
+        ...expandedFromCombos.filter(i => i.target_type === 'event').map(i => i.target_id),
+      ]))
+      const workshopIds = Array.from(new Set([
+        ...directRegs.filter(r => r.target_type === 'workshop').map(r => r.target_id),
+        ...expandedFromCombos.filter(i => i.target_type === 'workshop').map(i => i.target_id),
+      ]))
+
+      const [eventsRes, workshopsRes] = await Promise.all([
+        eventIds.length ? supabase.from('events').select('id, name, is_active, start_time, end_time').in('id', eventIds) : Promise.resolve({ data: [] }),
+        workshopIds.length ? supabase.from('workshops').select('id, title, is_active, start_time, end_time').in('id', workshopIds) : Promise.resolve({ data: [] })
+      ])
+      const eventsMap = new Map((eventsRes.data || []).map(e => [e.id, e]))
+      const workshopsMap = new Map((workshopsRes.data || []).map(w => [w.id, w]))
+
+          const now = new Date()
+      const provisional = []
+
+      // Add direct regs if match selected targets and valid timing/active
+      for (const r of directRegs) {
+        const pair = `${r.target_type}:${r.target_id}`
+        if (!allowedPairs.has(pair)) continue
+        if (r.target_type === 'event') {
+          const e = eventsMap.get(r.target_id)
+          if (!e || !e.is_active) continue
+          const startTime = e.start_time ? new Date(e.start_time) : null
+          const endTime = e.end_time ? new Date(e.end_time) : null
+          if (startTime && endTime && (now < startTime || now > endTime)) continue
+          provisional.push({ target_type: 'event', target_id: r.target_id, target_name: e.name, payment_status: r.payment_status })
+        } else if (r.target_type === 'workshop') {
+          const w = workshopsMap.get(r.target_id)
+          if (!w || !w.is_active) continue
+          const startTime = w.start_time ? new Date(w.start_time) : null
+          const endTime = w.end_time ? new Date(w.end_time) : null
+          if (startTime && endTime && (now < startTime || now > endTime)) continue
+          provisional.push({ target_type: 'workshop', target_id: r.target_id, target_name: w.title, payment_status: r.payment_status })
+        }
+      }
+
+      // Add combo-expanded items if match selected targets and valid timing/active
+      for (const i of expandedFromCombos) {
+        const pair = `${i.target_type}:${i.target_id}`
+        if (!allowedPairs.has(pair)) continue
+        if (i.target_type === 'event') {
+          const e = eventsMap.get(i.target_id)
+          // For combo-derived access, be lenient on timing/active
+          if (!e) continue
+          provisional.push({ target_type: 'event', target_id: i.target_id, target_name: e.name, payment_status: 'approved' })
+        } else if (i.target_type === 'workshop') {
+          const w = workshopsMap.get(i.target_id)
+          if (!w) continue
+          provisional.push({ target_type: 'workshop', target_id: i.target_id, target_name: w.title, payment_status: 'approved' })
+        }
+      }
+
+      // If nothing matched but combo is approved and selected targets intersect combo items,
+      // allow those items even if metadata couldn't be fetched
+      if (provisional.length === 0 && expandedFromCombos.length > 0) {
+        for (const i of expandedFromCombos) {
+          const pair = `${i.target_type}:${i.target_id}`
+          if (!allowedPairs.has(pair)) continue
+          provisional.push({
+            target_type: i.target_type,
+            target_id: i.target_id,
+            target_name: i.target_type === 'event' ? 'Event' : 'Workshop',
+            payment_status: 'approved'
+          })
+        }
+      }
+
+      // Dedupe by target_type + target_id
+      const dedupMap = new Map()
+      for (const p of provisional) {
+        const key = `${p.target_type}:${p.target_id}`
+        if (!dedupMap.has(key)) dedupMap.set(key, p)
+      }
+
+      return Array.from(dedupMap.values())
     } catch (error) {
       console.error('Error validating registrations:', error)
-      return []
+      throw error
     }
   }
 
@@ -299,6 +587,7 @@ const Attendance = () => {
   const clearFilters = () => {
     setSearchTerm('')
     setDateRange({ start: '', end: '' })
+    setSelectedTargets([])
     setCurrentPage(1)
   }
 
@@ -327,6 +616,20 @@ const Attendance = () => {
           >
             <Download className="h-5 w-5" />
             <span>Export CSV</span>
+          </button>
+          <button
+            onClick={openQRGenerator}
+            className="btn-secondary flex items-center space-x-2"
+          >
+            <Plus className="h-5 w-5" />
+            <span>Generate QR Code</span>
+          </button>
+          <button
+            onClick={generateBulkQRCodes}
+            className="btn-secondary flex items-center space-x-2"
+          >
+            <Users className="h-5 w-5" />
+            <span>Bulk QR Codes</span>
           </button>
           <button
             onClick={startScanning}
@@ -391,9 +694,17 @@ const Attendance = () => {
 
           {selectedTargets.length > 0 && (
             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                <strong>Selected:</strong> {selectedTargets.length} target(s) - Scanning mode active
-              </p>
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Selected:</strong> {selectedTargets.length} target(s) - Scanning mode active
+                </p>
+                <button
+                  onClick={() => setSelectedTargets([])}
+                  className="text-xs text-blue-600 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-100 underline"
+                >
+                  Clear Selection
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -440,12 +751,55 @@ const Attendance = () => {
             </button>
           </div>
         </div>
+
+        {/* Filter Status */}
+        {(searchTerm || dateRange.start || dateRange.end || selectedTargets.length > 0) && (
+          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-sm text-blue-800 dark:text-blue-200">
+                <Filter className="w-4 h-4" />
+                <span><strong>Active Filters:</strong></span>
+                {searchTerm && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 rounded text-xs">Search: "{searchTerm}"</span>}
+                {dateRange.start && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 rounded text-xs">From: {dateRange.start}</span>}
+                {dateRange.end && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 rounded text-xs">To: {dateRange.end}</span>}
+                {selectedTargets.length > 0 && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 rounded text-xs">{selectedTargets.length} Target(s)</span>}
+              </div>
+              <button
+                onClick={clearFilters}
+                className="text-xs text-blue-600 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-100 underline"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Attendance Logs Table */}
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+             {/* Attendance Logs Table */}
+       <div className="card overflow-hidden">
+         <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+           <h3 className="text-lg font-medium text-gray-900 dark:text-white">Attendance Logs</h3>
+           <div className="flex items-center space-x-4">
+             <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+               <span>Live Updates</span>
+               <span>•</span>
+               <span>Last updated: {lastUpdate.toLocaleTimeString()}</span>
+             </div>
+             <button
+               onClick={() => {
+                 fetchAttendanceLogs()
+                 setLastUpdate(new Date())
+               }}
+               className="btn-secondary text-sm px-3 py-1"
+               disabled={loading}
+             >
+               {loading ? 'Refreshing...' : 'Refresh'}
+             </button>
+           </div>
+         </div>
+         <div className="overflow-x-auto">
+           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -459,6 +813,9 @@ const Attendance = () => {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  QR Code
                 </th>
               </tr>
             </thead>
@@ -493,12 +850,46 @@ const Attendance = () => {
                       {new Date(log.scan_time).toLocaleString()}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Present
-                    </span>
-                  </td>
+                                     <td className="px-6 py-4 whitespace-nowrap">
+                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                       <CheckCircle className="h-3 w-3 mr-1" />
+                       Present
+                     </span>
+                     <div className="text-xs text-gray-500 mt-1">
+                       {new Date(log.scan_time).toLocaleTimeString()}
+                     </div>
+                   </td>
+                                     <td className="px-6 py-4 whitespace-nowrap">
+                     <div className="flex space-x-2">
+                       <button
+                         onClick={() => {
+                           setSelectedUser({
+                             id: log.users.id,
+                             name: log.users.name,
+                             email: log.users.email,
+                             photo_url: log.users.photo_url
+                           })
+                           setShowQRModal(true)
+                         }}
+                         className="flex items-center space-x-2 px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-md hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                       >
+                         <QrCode className="w-4 h-4" />
+                         <span className="text-sm">View QR</span>
+                       </button>
+                       <button
+                         onClick={() => {
+                           const url = `${window.location.origin}/attendance/${log.users.id}`
+                           navigator.clipboard.writeText(url)
+                           alert('Attendance link copied to clipboard!')
+                         }}
+                         className="flex items-center space-x-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                         title="Copy attendance link for user"
+                       >
+                         <Eye className="w-4 h-4" />
+                         <span className="text-sm">Share</span>
+                       </button>
+                     </div>
+                   </td>
                 </tr>
               ))}
             </tbody>
@@ -558,9 +949,24 @@ const Attendance = () => {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
             <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                QR Code Scanner
-              </h3>
+                             <div className="flex justify-between items-center mb-4">
+                 <div>
+                   <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                     QR Code Scanner
+                   </h3>
+                   {scanSessionCount > 0 && (
+                     <p className="text-sm text-gray-500 dark:text-gray-400">
+                       Session: {scanSessionCount} user(s) scanned
+                     </p>
+                   )}
+                 </div>
+                 <button
+                   onClick={stopScanning}
+                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                 >
+                   <X className="w-5 w-5" />
+                 </button>
+               </div>
               
               {scanResult && (
                 <div className={`mb-4 p-3 rounded-md ${
@@ -568,26 +974,232 @@ const Attendance = () => {
                     ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
                     : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
                 }`}>
-                  <p className={`text-sm ${
-                    scanResult.success 
-                      ? 'text-green-800 dark:text-green-200' 
-                      : 'text-red-800 dark:text-red-200'
-                  }`}>
-                    {scanResult.message}
-                    {scanResult.user && ` - ${scanResult.user}`}
-                  </p>
+                  <div className="flex items-start space-x-2">
+                    {scanResult.success ? (
+                      <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                    )}
+                    <div className="flex-1">
+                      <p className={`text-sm font-medium ${
+                        scanResult.success 
+                          ? 'text-green-800 dark:text-green-200' 
+                          : 'text-red-800 dark:text-red-200'
+                      }`}>
+                        {scanResult.message}
+                      </p>
+                      {scanResult.user && (
+                        <p className={`text-xs mt-1 ${
+                          scanResult.success 
+                            ? 'text-green-700 dark:text-green-300' 
+                            : 'text-red-700 dark:text-red-300'
+                        }`}>
+                          User: {scanResult.user}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
               
-              <div id="qr-reader" className="mb-4"></div>
+                             <div id="qr-reader" className="mb-4 min-h-[300px] flex items-center justify-center">
+                 {!scanning && (
+                   <div className="text-center text-gray-500">
+                     {processingScan ? (
+                       <div className="text-center">
+                         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                         <p className="text-sm font-medium">Processing Scan...</p>
+                         <p className="text-xs text-gray-400">Please wait, checking attendance...</p>
+                       </div>
+                     ) : scanResult ? (
+                       <div className="text-center">
+                         <div className="w-16 h-16 mx-auto mb-2">
+                           {scanResult.success ? (
+                             <CheckCircle className="w-16 h-16 text-green-500" />
+                           ) : (
+                             <XCircle className="w-16 h-16 text-red-500" />
+                           )}
+                         </div>
+                         <p className="text-sm font-medium">Scan Complete</p>
+                         <p className="text-xs text-gray-400">Ready for next scan in a few seconds...</p>
+                       </div>
+                     ) : (
+                       <div className="text-center">
+                         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mx-auto mb-2"></div>
+                         <p>Initializing scanner...</p>
+                       </div>
+                     )}
+                   </div>
+                 )}
+                 {scanning && !processingScan && !scanResult && (
+                   <div className="text-center text-green-600">
+                     <div className="w-16 h-16 mx-auto mb-2">
+                       <QrCode className="w-16 h-16 text-green-500" />
+                     </div>
+                     <p className="text-sm font-medium">Ready to Scan</p>
+                     <p className="text-xs text-gray-400">Point camera at QR code</p>
+                   </div>
+                 )}
+               </div>
               
-              <div className="flex justify-end space-x-3">
+                             <div className="flex justify-between items-center">
+                 <div className="text-sm text-gray-500 dark:text-gray-400">
+                   {scanSessionCount > 0 && (
+                     <span>Total scanned: {scanSessionCount}</span>
+                   )}
+                 </div>
+                 <div className="flex space-x-3">
+                   {scanResult && (
+                     <button
+                       onClick={() => {
+                         setScanResult(null)
+                         setProcessingScan(false)
+                         setScanning(true)
+                       }}
+                       className="btn-primary text-sm px-3 py-1"
+                     >
+                       New Scan
+                     </button>
+                   )}
+                   <button
+                     onClick={stopScanning}
+                     className="btn-secondary"
+                   >
+                     Stop Scanning
+                   </button>
+                 </div>
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Generation Modal */}
+      {showQRModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-medium text-gray-900 dark:text-white">
+                  Generate Attendance QR Code
+                </h3>
                 <button
-                  onClick={stopScanning}
-                  className="btn-secondary"
+                  onClick={() => setShowQRModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
-                  Stop Scanning
+                  <XCircle className="w-6 h-6" />
                 </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* User Selection */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Search Users
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search by name, email, or enrollment number..."
+                        value={searchUser}
+                        onChange={(e) => setSearchUser(e.target.value)}
+                        className="input-field pl-10"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg">
+                    {users
+                      .filter(user => 
+                        user.name?.toLowerCase().includes(searchUser.toLowerCase()) ||
+                        user.email?.toLowerCase().includes(searchUser.toLowerCase()) ||
+                        user.enrollment_number?.toLowerCase().includes(searchUser.toLowerCase())
+                      )
+                      .map(user => (
+                        <div
+                          key={user.id}
+                          onClick={() => selectUserForQR(user)}
+                          className={`p-3 border-b border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                            selectedUser?.id === user.id ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' : ''
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="relative">
+                              {user.photo_url ? (
+                                <img
+                                  src={user.photo_url}
+                                  alt={user.name}
+                                  className="w-10 h-10 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                  <User className="w-5 h-5 text-purple-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                                {user.name}
+                              </h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {user.email}
+                              </p>
+                              <p className="text-xs text-gray-400 dark:text-gray-500">
+                                ID: {user.id}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                                 {/* QR Code Display */}
+                 <div className="flex items-center justify-center">
+                   {selectedUser ? (
+                     <div className="text-center">
+                       <UserQRCode
+                         userId={selectedUser.id}
+                         userName={selectedUser.name}
+                         userEmail={selectedUser.email}
+                         userPhoto={selectedUser.photo_url}
+                       />
+                       <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                         <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                           Share this attendance link with the user:
+                         </p>
+                         <div className="flex items-center space-x-2">
+                           <input
+                             type="text"
+                             value={`${window.location.origin}/attendance/${selectedUser.id}`}
+                             readOnly
+                             className="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md"
+                           />
+                           <button
+                             onClick={() => {
+                               const url = `${window.location.origin}/attendance/${selectedUser.id}`
+                               navigator.clipboard.writeText(url)
+                               alert('Attendance link copied to clipboard!')
+                             }}
+                             className="px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                           >
+                             Copy
+                           </button>
+                         </div>
+                         <p className="text-xs text-blue-600 dark:text-blue-300 mt-2">
+                           Users can open this link to show their QR code with real-time attendance updates
+                         </p>
+                       </div>
+                     </div>
+                   ) : (
+                     <div className="text-center p-8 text-gray-500 dark:text-gray-400">
+                       <QrCode className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+                       <p>Select a user to generate their QR code</p>
+                     </div>
+                   )}
+                 </div>
               </div>
             </div>
           </div>

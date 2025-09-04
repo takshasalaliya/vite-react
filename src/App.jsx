@@ -18,6 +18,9 @@ import Settings from './pages/Settings'
 import Layout from './components/Layout'
 import LoadingSpinner from './components/LoadingSpinner'
 import RegistrationCoordinator from './pages/RegistrationCoordinator'
+import UserDashboard from './pages/UserDashboard'
+import UserAttendancePage from './pages/UserAttendancePage'
+import Register from './pages/Register'
 
 const ProtectedRoute = ({ children, requireAdmin = false, requireEventManager = false, requireRegistrationCommittee = false }) => {
 	const { 
@@ -118,6 +121,7 @@ function App() {
 			<Router>
 				<Routes>
 					<Route path="/login" element={<Login />} />
+					<Route path="/register" element={<Register />} />
 					
 					{/* Admin Panel Routes */}
 					<Route
@@ -132,6 +136,7 @@ function App() {
 						<Route path="dashboard" element={<Dashboard />} />
 						<Route path="users" element={<Users />} />
 						<Route path="colleges" element={<Colleges />} />
+						<Route path="event-manager" element={<EventManager />} />
 						<Route path="events" element={<Events />} />
 						<Route path="workshops" element={<Workshops />} />
 						<Route path="combos" element={<Combos />} />
@@ -182,9 +187,21 @@ function App() {
 						<Route path="attendance" element={<RegistrationCoordinator />} />
 					</Route>
 
+					{/* User Dashboard Routes */}
+					<Route
+						path="/user"
+						element={
+							<ProtectedRoute>
+								<UserDashboard />
+							</ProtectedRoute>
+						}
+					/>
+
 					{/* Public Routes */}
 					<Route path="/" element={<Home />} />
+					<Route path="/events" element={<Events />} />
 					<Route path="/participant" element={<Participant />} />
+					<Route path="/attendance/:userId" element={<UserAttendancePage />} />
 				</Routes>
 			</Router>
 		</AuthProvider>
