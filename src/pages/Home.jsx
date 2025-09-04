@@ -138,9 +138,9 @@ const Home = () => {
             {/* Logo */}
             <div className="flex justify-center mb-6 sm:mb-8">
               <img 
-                src="/image/Logo with Name.png" 
+                src="/image/LOGO.png" 
                 alt="INNOSTRA Logo" 
-                className="h-16 sm:h-20 md:h-24 w-auto"
+                className="h-16 sm:h-20 md:h-24 lg:h-32 xl:h-40 w-auto"
                 style={{ filter: 'drop-shadow(0 0 30px rgba(201, 111, 99, 0.5))' }}
               />
             </div>
@@ -219,8 +219,9 @@ const Home = () => {
 				</div>
 
           {/* Navigation Tabs */}
-          <div className="flex justify-center mb-8 sm:mb-12">
-            <div className="flex space-x-1 sm:space-x-2 bg-white/10 backdrop-blur-sm rounded-lg p-1 sm:p-2">
+          <div className="mb-8 sm:mb-12">
+            <div className="px-4">
+              <div className="flex w-full gap-1 sm:gap-2 bg-white/10 backdrop-blur-sm rounded-lg p-1 sm:p-2">
               {[
                 { id: 'events', label: 'Events', icon: Calendar, count: events.length },
                 { id: 'workshops', label: 'Workshops', icon: BookOpen, count: workshops.length },
@@ -231,20 +232,21 @@ const Home = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 rounded-md text-sm sm:text-base font-medium transition-all duration-200 ${
+                    className={`flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center sm:space-x-2 space-y-1 sm:space-y-0 px-3 sm:px-4 py-2 sm:py-3 rounded-md text-sm sm:text-base font-medium transition-all duration-200 ${
                       activeTab === tab.id
                         ? 'bg-[#C96F63] text-white shadow-lg'
                         : 'text-[#F6F9FF]/70 hover:text-[#F6F9FF] hover:bg-white/10'
                     }`}
                   >
-                    <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{tab.label}</span>
-                    <span className="bg-white/20 px-2 py-1 rounded-full text-xs">
+                    <Icon className="shrink-0 w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="text-center whitespace-normal break-words leading-snug">{tab.label}</span>
+                    <span className="shrink-0 bg-white/20 px-2 py-1 rounded-full text-xs mt-0 sm:mt-0">
                       {tab.count}
                     </span>
                   </button>
                 )
               })}
+              </div>
             </div>
 			</div>
 
@@ -252,7 +254,7 @@ const Home = () => {
           <div className="min-h-[400px]">
             {activeTab === 'events' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {events.map((event) => (
+                {events.filter(e => e.category !== 'food').map((event) => (
                   <div key={event.id} className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-hidden hover:bg-white/15 transition-all duration-300">
                     {event.photo_url && (
                       <img 

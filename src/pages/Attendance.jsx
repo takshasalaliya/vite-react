@@ -176,7 +176,7 @@ const Attendance = () => {
       const [eventsData, workshopsData] = await Promise.all([
         supabase
           .from('events')
-          .select('id, name')
+          .select('id, name, category')
           .eq('is_active', true)
           .order('name'),
         supabase
@@ -648,6 +648,28 @@ const Attendance = () => {
         </h3>
         
         <div className="space-y-4">
+          {/* Food Category */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Food</h4>
+            <div className="flex flex-wrap gap-2">
+              {events.filter(e => e.category === 'food').map(event => {
+                const isSelected = selectedTargets.some(t => t.id === event.id && t.type === 'event')
+                return (
+                  <button
+                    key={event.id}
+                    onClick={() => toggleTargetSelection({ id: event.id, type: 'event' })}
+                    className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      isSelected
+                        ? 'bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-200'
+                        : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {event.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <div>
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Events</h4>
             <div className="flex flex-wrap gap-2">

@@ -28,6 +28,7 @@ const Combos = () => {
   const [activeOnly, setActiveOnly] = useState(false)
   const [events, setEvents] = useState([])
   const [workshops, setWorkshops] = useState([])
+  const [excludedEventIds, setExcludedEventIds] = useState([])
 
   const [formData, setFormData] = useState({
     name: '',
@@ -83,6 +84,12 @@ const Combos = () => {
               .eq('combo_id', combo.id)
               .order('position')
 
+            // Fetch combo exclusions (non top-up events)
+            const { data: comboExclusions } = await supabase
+              .from('combo_exclusions')
+              .select('target_id')
+              .eq('combo_id', combo.id)
+
             // Fetch direct registrations for this combo
             const { data: directRegs } = await supabase
               .from('registrations')
@@ -125,6 +132,7 @@ const Combos = () => {
             return {
               ...combo,
               combo_items: comboItemsWithDetails,
+              combo_exclusions: comboExclusions?.map(e => e.target_id) || [],
               registrations: uniqueRegistrations
             }
           } catch (error) {
@@ -132,6 +140,7 @@ const Combos = () => {
             return {
               ...combo,
               combo_items: [],
+              combo_exclusions: [],
               registrations: []
             }
           }
@@ -204,12 +213,29 @@ const Combos = () => {
           const { error: itemsError } = await supabase
             .from('combo_items')
             .insert(comboItems.map((item, index) => ({
-              ...item,
+              target_type: item.target_type,
+              target_id: item.target_id,
               combo_id: editingCombo.id,
               position: index
             })))
           
           if (itemsError) throw itemsError
+        }
+
+        // Update combo exclusions
+        await supabase
+          .from('combo_exclusions')
+          .delete()
+          .eq('combo_id', editingCombo.id)
+
+        if ((excludedEventIds?.length || 0) > 0) {
+          const { error: exclError } = await supabase
+            .from('combo_exclusions')
+            .insert(excludedEventIds.map(eventId => ({
+              combo_id: editingCombo.id,
+              target_id: eventId
+            })))
+          if (exclError) throw exclError
         }
       } else {
         const { data: newCombo, error } = await supabase
@@ -223,12 +249,24 @@ const Combos = () => {
           const { error: itemsError } = await supabase
             .from('combo_items')
             .insert(comboItems.map((item, index) => ({
-              ...item,
+              target_type: item.target_type,
+              target_id: item.target_id,
               combo_id: newCombo[0].id,
               position: index
             })))
           
           if (itemsError) throw itemsError
+        }
+
+        // Create combo exclusions
+        if ((excludedEventIds?.length || 0) > 0) {
+          const { error: exclError } = await supabase
+            .from('combo_exclusions')
+            .insert(excludedEventIds.map(eventId => ({
+              combo_id: newCombo[0].id,
+              target_id: eventId
+            })))
+          if (exclError) throw exclError
         }
       }
 
@@ -243,6 +281,7 @@ const Combos = () => {
         is_active: true
       })
       setComboItems([])
+      setExcludedEventIds([])
       fetchCombos()
     } catch (error) {
       console.error('Error saving combo:', error)
@@ -278,6 +317,7 @@ const Combos = () => {
       is_active: combo.is_active
     })
     setComboItems(combo.combo_items || [])
+    setExcludedEventIds(combo.combo_exclusions || [])
     setShowModal(true)
   }
 
@@ -623,6 +663,26 @@ const Combos = () => {
                   )}
                 </div>
                 
+                {/* Non Top-up Events (Exclusions) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Non Top-up Events (disable when this combo selected)</label>
+                  <div className="mt-2 max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-3 bg-gray-50 dark:bg-gray-700">
+                    {events.map(e => (
+                      <label key={e.id} className="flex items-center space-x-3 py-1">
+                        <input
+                          type="checkbox"
+                          checked={excludedEventIds.includes(e.id)}
+                          onChange={(ev) => {
+                            setExcludedEventIds(prev => ev.target.checked ? [...prev, e.id] : prev.filter(id => id !== e.id))
+                          }}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-gray-100">{e.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex items-center">
                   <input
                     type="checkbox"

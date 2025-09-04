@@ -2517,6 +2517,29 @@ const RegistrationCoordinator = () => {
                     </div>
                   </div>
                   <div>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Food</h4>
+                    <div className="space-y-2 max-h-56 overflow-y-auto">
+                      {events.filter(e => e.category === 'food').map(event => {
+                        const selected = selectedTarget && selectedTarget.id === event.id && selectedTarget.type === 'event'
+                        return (
+                          <label key={event.id} className="flex items-center space-x-2 text-sm">
+                            <input 
+                              type="radio" 
+                              name="food_event"
+                              checked={selected} 
+                              onChange={() => {
+                                console.log(`Food event ${event.name} selected`)
+                                setSelectedTarget({ id: event.id, type: 'event', name: event.name })
+                                setScannerSelectedTargets([{ id: event.id, type: 'event' }])
+                              }} 
+                            />
+                            <span>{event.name}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div>
                     <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Workshops</h4>
                     <div className="space-y-2 max-h-56 overflow-y-auto">
                       {workshops.map(workshop => {

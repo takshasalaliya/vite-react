@@ -147,25 +147,31 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     try {
       const { data, error } = await supabase
         .from('combos')
-        .select('*, combo_items(*)')
+        .select('*, combo_items(*), combo_exclusions:combo_exclusions(target_id)')
         .eq('is_active', true)
         .order('name')
       
       if (error) throw error
-      setCombos(data || [])
+      // Normalize exclusions into array of ids per combo
+      const withExclusions = (data || []).map(c => ({
+        ...c,
+        combo_exclusions: (c.combo_exclusions || []).map(e => e.target_id)
+      }))
+      setCombos(withExclusions)
     } catch (error) {
       console.error('Error fetching combos:', error)
     }
   }
 
   // Check if an event is part of any selected combo
-  const isEventInSelectedCombo = (eventId) => {
-    return formData.selected_combos.some(comboId => {
+  const getEventDisableReason = (eventId) => {
+    for (const comboId of formData.selected_combos) {
       const combo = combos.find(c => c.id === comboId)
-      return combo?.combo_items?.some(item => 
-        item.target_type === 'event' && item.target_id === eventId
-      )
-    })
+      if (!combo) continue
+      if ((combo.combo_exclusions || []).includes(eventId)) return 'excluded'
+      if (combo?.combo_items?.some(item => item.target_type === 'event' && item.target_id === eventId)) return 'included'
+    }
+    return null
   }
 
   // Check if a workshop is part of any selected combo
@@ -386,7 +392,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     })
   }
 
-  // Handle combo selection with automatic event removal
+  // Handle combo selection with automatic event removal (single combo only)
   const handleComboChange = (comboId, checked) => {
     setFormData(prev => {
       const combo = combos.find(c => c.id === comboId)
@@ -395,8 +401,8 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
       let newFormData = { ...prev }
       
       if (checked) {
-        // Add combo to selected combos
-        newFormData.selected_combos = [...prev.selected_combos, comboId]
+        // Allow only one combo at a time
+        newFormData.selected_combos = [comboId]
         
         // Remove individual events and workshops that are part of this combo
         const eventsToRemove = []
@@ -426,8 +432,8 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
         )
         
       } else {
-        // Remove combo from selected combos
-        newFormData.selected_combos = prev.selected_combos.filter(id => id !== comboId)
+        // Deselect all combos when unchecking
+        newFormData.selected_combos = []
       }
       
       return newFormData
@@ -528,6 +534,10 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     return { events: comboEvents, workshops: comboWorkshops }
   }
 
+  const hasSelectedCombo = () => {
+    return (formData.selected_combos?.length || 0) > 0
+  }
+
   const isFormValid = () => {
     return (
       formData.name &&
@@ -547,7 +557,8 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
       !isValidating.email &&
       !isValidating.phone &&
       !isValidating.enrollment_number &&
-      !isValidating.transaction_id
+      !isValidating.transaction_id &&
+      hasSelectedCombo()
     )
   }
 
@@ -1192,7 +1203,8 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                   </label>
                    <div className="max-h-48 overflow-y-auto border border-[#C96F63]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
                     {events.filter(e => e.category === 'tech').map(event => {
-                      const isDisabled = isEventInSelectedCombo(event.id)
+                      const reason = getEventDisableReason(event.id)
+                      const isDisabled = !!reason
                       return (
                         <label key={event.id} className={`flex items-center space-x-3 py-2 rounded px-2 ${
                            isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#0B1536]/50 cursor-pointer'
@@ -1204,10 +1216,11 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                             disabled={isDisabled}
                              className="h-4 w-4 text-[#C96F63] focus:ring-[#C96F63] border-[#C96F63]/30 rounded"
                           />
-                          {isDisabled && (
-                             <span className="text-xs text-[#F6F9FF]/60 ml-2">
-                              (Part of selected combo)
-                            </span>
+                          {reason === 'excluded' && (
+                            <span className="text-xs text-[#F6F9FF]/60 ml-2">Game are no Avaliable in this combo</span>
+                          )}
+                          {reason === 'included' && (
+                            <span className="text-xs text-[#F6F9FF]/60 ml-2">(Part of selected combo)</span>
                           )}
                           <div className="flex-1">
                              <span className="text-sm font-medium text-[#F6F9FF]">
@@ -1230,7 +1243,8 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                   </label>
                    <div className="max-h-48 overflow-y-auto border border-[#FFCC66]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
                     {events.filter(e => e.category === 'non-tech').map(event => {
-                      const isDisabled = isEventInSelectedCombo(event.id)
+                      const reason = getEventDisableReason(event.id)
+                      const isDisabled = !!reason
                       return (
                         <label key={event.id} className={`flex items-center space-x-3 py-2 rounded px-2 ${
                            isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#0B1536]/50 cursor-pointer'
@@ -1242,10 +1256,11 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                             disabled={isDisabled}
                              className="h-4 w-4 text-[#FFCC66] focus:ring-[#FFCC66] border-[#FFCC66]/30 rounded"
                           />
-                          {isDisabled && (
-                             <span className="text-xs text-[#F6F9FF]/60 ml-2">
-                              (Part of selected combo)
-                            </span>
+                          {reason === 'excluded' && (
+                            <span className="text-xs text-[#F6F9FF]/60 ml-2">Game are no Avaliable in this combo</span>
+                          )}
+                          {reason === 'included' && (
+                            <span className="text-xs text-[#F6F9FF]/60 ml-2">(Part of selected combo)</span>
                           )}
                           <div className="flex-1">
                              <span className="text-sm font-medium text-[#F6F9FF]">
@@ -1310,7 +1325,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                         <input
                           type="radio"
                           name="combo"
-                          checked={formData.selected_combos.includes(combo.id)}
+                          checked={formData.selected_combos[0] === combo.id}
                           onChange={(e) => handleComboChange(combo.id, e.target.checked)}
                            className="h-4 w-4 text-[#C96F63] focus:ring-[#C96F63] border-[#C96F63]/30"
                         />
@@ -1321,6 +1336,9 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                            <span className="text-sm text-[#C96F63] ml-2">
                             ₹{combo.price || 0}
                           </span>
+                          {combo.combo_items?.some(ci => ci.target_type === 'event' && ci.target_name?.toLowerCase().includes('food')) && (
+                            <span className="ml-2 text-xs text-[#FFCC66]">Includes Food</span>
+                          )}
                         </div>
                       </label>
                     ))}
@@ -1333,6 +1351,9 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                  <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
                   Selection Summary
                 </label>
+                {!hasSelectedCombo() && (
+                  <p className="mb-2 text-sm text-red-400">Select at least one combo to continue.</p>
+                )}
                  <div className="p-3 bg-[#0B1536]/30 rounded-md border border-[#C96F63]/30 backdrop-blur-sm">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                     <div>

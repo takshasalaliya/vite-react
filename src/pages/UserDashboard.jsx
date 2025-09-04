@@ -173,8 +173,8 @@ export default function UserDashboard() {
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-white">INNOSTRA '25</h1>
                 
+                </div>
               </div>
-      </div>
 
             {/* User Info and Actions */}
             <div className="flex items-center space-x-3 sm:space-x-4">
@@ -183,12 +183,12 @@ export default function UserDashboard() {
                   <div className="text-right hidden sm:block">
                     <p className="text-sm font-medium text-white">{userData.name}</p>
                     <p className="text-xs text-[#F6F9FF]/60">{userData.email}</p>
-                </div>
+              </div>
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#C96F63] flex items-center justify-center">
                     <span className="text-white text-sm sm:text-base font-medium">
                       {userData.name?.charAt(0).toUpperCase()}
                     </span>
-              </div>
+            </div>
               </div>
               )}
               <button
@@ -223,7 +223,7 @@ export default function UserDashboard() {
                 </div>
                 {/* Orb Glow Effect */}
                 <div className="absolute inset-0 w-24 h-24 bg-gradient-to-br from-[#C96F63]/30 via-[#FFCC66]/30 via-purple-500/30 to-cyan-500/30 rounded-full blur-xl animate-pulse"></div>
-              </div>
+            </div>
 
               <h2 className="text-3xl font-bold text-white mb-3 bg-gradient-to-r from-[#C96F63] via-[#FFCC66] to-purple-400 bg-clip-text text-transparent">
                 Welcome to INNOSTRA!
@@ -237,7 +237,7 @@ export default function UserDashboard() {
                 <Sparkles className="w-6 h-6 animate-pulse" />
                 <span className="text-sm font-medium font-mono tracking-wider">Every Mind Holds an Astra</span>
                 <Sparkles className="w-6 h-6 animate-pulse" />
-              </div>
+          </div>
 
               <div className="w-full bg-[#1A0A2E]/50 rounded-full h-2 border border-[#C96F63]/30 overflow-hidden">
                 <div className="bg-gradient-to-r from-[#C96F63] via-[#FFCC66] to-purple-500 h-2 rounded-full animate-pulse shadow-lg" style={{ width: '100%' }}></div>
@@ -714,17 +714,17 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
           <div className="relative mb-8">
             <h1 className="text-4xl md:text-6xl font-bold text-[#F6F9FF] mb-3 tracking-wider animate-pulse">
               WELCOME TO
-            </h1>
+          </h1>
             <h1 className="text-5xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#C96F63] via-[#FFCC66] via-purple-400 to-[#1E3A8A] mb-4 tracking-wider animate-pulse">
               INNOSTRA
-            </h1>
+          </h1>
          
             
             {/* Central Cosmic Orb */}
             <div className="relative mx-auto mb-6">
               <div className="w-20 h-20 bg-gradient-to-br from-[#C96F63] via-[#FFCC66] via-purple-500 to-cyan-500 rounded-full flex items-center justify-center mx-auto animate-pulse shadow-2xl shadow-[#C96F63]/40">
                 <Star className="w-10 h-10 text-white animate-spin" style={{ animationDuration: '4s' }} />
-              </div>
+        </div>
               {/* Orb Glow Effect */}
               <div className="absolute inset-0 w-20 h-20 bg-gradient-to-br from-[#C96F63]/30 via-[#FFCC66]/30 via-purple-500/30 to-cyan-500/30 rounded-full blur-xl animate-pulse"></div>
             </div>
@@ -883,7 +883,7 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
                     <div className="flex items-center space-x-2 mb-3">
                       <Sparkles className="w-4 h-4 text-[#FFCC66] animate-pulse" />
                       <p className="text-xs text-[#FFCC66] font-medium font-mono tracking-wider">✨ Cosmic Package Includes:</p>
-                    </div>
+              </div>
                     <div className="space-y-2">
                       {event.comboItems.map((item, idx) => (
                         <div key={idx} className="flex items-center space-x-3 text-xs text-[#F6F9FF]/90">
@@ -892,11 +892,11 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
                             {item.events?.name || item.workshops?.title || 'Event'} 
                             <span className="text-[#C96F63] ml-2">({item.target_type})</span>
                           </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              </div>
+            ))}
+          </div>
+          </div>
+        )}
 
                 {/* Event Details - Cosmic Theme */}
                 <div className="space-y-3 text-sm relative z-10">
@@ -907,30 +907,30 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
                   <div className="flex items-center space-x-3 p-2 bg-[#0B1536]/60 rounded-lg border border-[#FFCC66]/20">
                     <CreditCard className="w-4 h-4 text-[#FFCC66]" />
                     <span className="text-[#F6F9FF]/90 font-mono">₹{event.price}</span>
-                  </div>
                 </div>
+              </div>
 
                 {/* Action Buttons - Always show for all events */}
             <div className="mt-4 pt-3 border-t border-purple-500/30">
                   
-            </div>
               </div>
+                    </div>
             ))}
-          </div>
+                  </div>
         ) : (
           <div className="text-center py-12">
             <div className="relative mx-auto mb-6">
               <div className="w-20 h-20 bg-gradient-to-br from-[#C96F63]/40 to-[#FFCC66]/40 rounded-full flex items-center justify-center mx-auto animate-pulse shadow-2xl shadow-[#C96F63]/30">
                 <Calendar className="w-10 h-10 text-[#C96F63]" />
-              </div>
+                    </div>
               {/* Orb Glow Effect */}
               <div className="absolute inset-0 w-20 h-20 bg-gradient-to-br from-[#C96F63]/20 via-[#FFCC66]/20 to-purple-500/20 rounded-full blur-xl animate-pulse"></div>
-            </div>
+                  </div>
             <h4 className="text-xl font-bold text-[#F6F9FF] mb-3 bg-gradient-to-r from-[#C96F63] to-[#FFCC66] bg-clip-text text-transparent">No Cosmic Events Yet</h4>
             <p className="text-[#F6F9FF]/70 font-mono">Your journey through the stars hasn't begun yet. Register for events to start your cosmic adventure! ✨</p>
-          </div>
+                </div>
         )}
-      </div>
+              </div>
 
 
 
@@ -942,8 +942,8 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
           <div className="absolute top-0 left-1/4 w-32 h-32 bg-gradient-radial from-[#C96F63]/20 to-transparent rounded-full blur-2xl animate-pulse"></div>
           <div className="absolute bottom-0 right-1/4 w-40 h-40 bg-gradient-radial from-[#FFCC66]/20 to-transparent rounded-full blur-2xl animate-pulse" style={{ animationDelay: '1s' }}></div>
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-gradient-radial from-purple-500/20 to-transparent rounded-full blur-2xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        </div>
-        
+              </div>
+
         <div className="relative z-10 text-center">
           <div className="inline-block p-8 bg-gradient-to-br from-[#07021A]/90 via-[#0B1536]/80 to-[#0B0412]/90 backdrop-blur-xl rounded-3xl border border-[#C96F63]/40 shadow-2xl shadow-[#C96F63]/30">
             {/* Animated Cosmic Particles */}

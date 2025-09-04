@@ -23,9 +23,11 @@ const EventManager = () => {
   const [loading, setLoading] = useState(true)
   const [showEventModal, setShowEventModal] = useState(false)
   const [showUserModal, setShowUserModal] = useState(false)
+  const [showFieldModal, setShowFieldModal] = useState(false)
   const [showParticipationModal, setShowParticipationModal] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
   const [editingUser, setEditingUser] = useState(null)
+  const [editingField, setEditingField] = useState(null)
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -58,6 +60,10 @@ const EventManager = () => {
     field_id: '',
     role: 'event_handler',
     photo_url: ''
+  })
+
+  const [fieldFormData, setFieldFormData] = useState({
+    name: ''
   })
 
   const roles = [
@@ -123,7 +129,6 @@ const EventManager = () => {
                 .from('users')
                 .select('id, name, email, phone')
                 .eq('id', event.handler_id)
-                .single()
               handler = handlerData
             }
 
@@ -523,7 +528,8 @@ const EventManager = () => {
 
   const categories = [
     { value: 'tech', label: 'Tech' },
-    { value: 'non-tech', label: 'Non-Tech' }
+    { value: 'non-tech', label: 'Non-Tech' },
+    { value: 'food', label: 'Food' }
   ]
 
   if (loading) {
@@ -580,6 +586,16 @@ const EventManager = () => {
              }`}
            >
              Event Handlers
+           </button>
+           <button 
+             onClick={() => setActiveTab('fields')}
+             className={`border-b-2 py-2 px-1 text-sm font-medium ${
+               activeTab === 'fields'
+                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+             }`}
+           >
+             Fields
            </button>
          </nav>
        </div>
@@ -854,6 +870,89 @@ const EventManager = () => {
             </div>
          </div>
        )}
+
+      {/* Fields Tab Content */}
+      {activeTab === 'fields' && (
+        <div className="mt-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Fields</h2>
+            <button
+              onClick={() => { setShowFieldModal(true); setEditingField(null); setFieldFormData({ name: '' }) }}
+              className="btn-secondary flex items-center space-x-2"
+            >
+              <Plus className="h-5 w-5" />
+              <span>Add Field</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {fields.map((field) => (
+              <div key={field.id} className="card p-6 flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">{field.name}</h3>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => { setEditingField(field); setFieldFormData({ name: field.name || '' }); setShowFieldModal(true) }}
+                    className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-400"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={async () => { if (!confirm('Delete field?')) return; await supabase.from('fields').delete().eq('id', field.id); fetchFields() }}
+                    className="text-red-600 hover:text-red-900 dark:hover:text-red-400"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Field Modal */}
+      {showFieldModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                {editingField ? 'Edit Field' : 'Add New Field'}
+              </h3>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  const name = fieldFormData.name?.trim()
+                  if (!name) return
+                  if (editingField) {
+                    await supabase.from('fields').update({ name }).eq('id', editingField.id)
+                  } else {
+                    await supabase.from('fields').insert([{ name }])
+                  }
+                  setShowFieldModal(false)
+                  setEditingField(null)
+                  setFieldFormData({ name: '' })
+                  fetchFields()
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Field Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={fieldFormData.name}
+                    onChange={(e) => setFieldFormData({ name: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button type="button" onClick={() => { setShowFieldModal(false); setEditingField(null) }} className="btn-secondary">Cancel</button>
+                  <button type="submit" className="btn-primary">{editingField ? 'Update' : 'Create'} Field</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Event Modal */}
       {showEventModal && (

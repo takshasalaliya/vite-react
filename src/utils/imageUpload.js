@@ -28,7 +28,8 @@ const uploadToImgBB = async (file) => {
     const formData = new FormData()
     formData.append('image', base64Data)
 
-    const response = await fetch('https://api.imgbb.com/1/upload?expiration=600&key=df36e8fe0c8bca3199500f788d8fc1da', {
+    // Do NOT pass any expiration parameter to avoid time-limited links
+    const response = await fetch('https://api.imgbb.com/1/upload?key=df36e8fe0c8bca3199500f788d8fc1da', {
       method: 'POST',
       body: formData,
       mode: 'cors',
@@ -44,7 +45,9 @@ const uploadToImgBB = async (file) => {
     const result = await response.json()
     
     if (result.success) {
-      return result.data.url
+      // Prefer the direct image URL which does not expire
+      // Fallback to display_url if image.url is missing
+      return result.data?.image?.url || result.data?.display_url || result.data?.url
     } else {
       throw new Error(result.error?.message || 'Failed to upload image')
     }

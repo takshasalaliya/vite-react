@@ -163,7 +163,8 @@ export default function Events() {
       'all': 'All Events',
       'tech': 'Technology',
       'workshop': 'Workshop',
-      'non-tech': 'Non-Technology'
+      'non-tech': 'Non-Technology',
+      'food': 'Food'
     }
     return names[category] || category
   }
@@ -172,7 +173,8 @@ export default function Events() {
     const icons = {
       'tech': <Rocket className="w-4 h-4" />,
       'workshop': <BookOpen className="w-4 h-4" />,
-      'non-tech': <Star className="w-4 h-4" />
+      'non-tech': <Star className="w-4 h-4" />,
+      'food': <Flame className="w-4 h-4" />
     }
     return icons[category] || <Sparkles className="w-4 h-4" />
   }
@@ -181,7 +183,8 @@ export default function Events() {
     const accents = {
       'tech': 'from-blue-500 to-purple-600',
       'workshop': 'from-purple-500 to-pink-600',
-      'non-tech': 'from-green-500 to-teal-600'
+      'non-tech': 'from-green-500 to-teal-600',
+      'food': 'from-yellow-500 to-orange-600'
     }
     return accents[category] || 'from-gray-500 to-gray-600'
   }
@@ -304,7 +307,7 @@ export default function Events() {
       >
         <div className="max-w-4xl mx-auto">
           <div className="flex flex-wrap justify-center gap-4">
-            {['all', 'tech', 'workshop', 'non-tech'].map((category) => (
+            {['all', 'tech', 'workshop', 'non-tech', 'food'].map((category) => (
               <motion.button
                 key={category}
                 onClick={() => setActiveTab(category)}

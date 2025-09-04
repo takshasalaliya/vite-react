@@ -131,10 +131,20 @@ const Workshops = () => {
     e.preventDefault()
     
     try {
+      const todayDate = new Date().toISOString().split('T')[0]
+      const toIsoDateTime = (timeString) => {
+        if (!timeString) return null
+        // Compose local date + time, then serialize to ISO
+        const date = new Date(`${todayDate}T${timeString}`)
+        return isNaN(date.getTime()) ? null : date.toISOString()
+      }
+
       const workshopData = {
         ...formData,
         fee: parseFloat(formData.fee),
-        capacity: formData.capacity ? parseInt(formData.capacity) : null
+        capacity: formData.capacity ? parseInt(formData.capacity) : null,
+        start_time: toIsoDateTime(formData.start_time),
+        end_time: toIsoDateTime(formData.end_time)
       }
 
       if (editingWorkshop) {
@@ -191,14 +201,25 @@ const Workshops = () => {
 
   const handleEdit = (workshop) => {
     setEditingWorkshop(workshop)
+    const toTimeInput = (isoString) => {
+      if (!isoString) return ''
+      try {
+        const d = new Date(isoString)
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mm = String(d.getMinutes()).padStart(2, '0')
+        return `${hh}:${mm}`
+      } catch {
+        return ''
+      }
+    }
     setFormData({
       title: workshop.title,
       description: workshop.description,
       photo_url: workshop.photo_url,
       fee: workshop.fee,
       capacity: workshop.capacity,
-      start_time: workshop.start_time,
-      end_time: workshop.end_time,
+      start_time: toTimeInput(workshop.start_time),
+      end_time: toTimeInput(workshop.end_time),
       speakers: workshop.speakers || [],
       is_active: workshop.is_active
     })
