@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { uploadImage, validateImage } from '../utils/imageUpload'
+import { sendRegistrationSuccessMessage } from '../lib/whatsappService'
 import { X, Check, AlertCircle, Upload, Sparkles, TreePine, Zap, Eye, Ghost, Skull, Moon, Star } from 'lucide-react'
+import QRCode from 'qrcode'
 
 const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -30,6 +32,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [qrCodeDataURL, setQrCodeDataURL] = useState('')
 
   const [validationErrors, setValidationErrors] = useState({
     email: '',
@@ -84,6 +87,36 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     const total = calculateTotalPrice()
     setFormData(prev => ({ ...prev, amount_paid: total.toFixed(2) }))
   }, [formData.selected_tech_events, formData.selected_non_tech_events, formData.selected_workshops, formData.selected_combos, events, workshops, combos])
+
+  // Generate dynamic UPI QR code
+  const generateUPIQRCode = async () => {
+    if (!formData.email || !formData.amount_paid) return
+
+    try {
+      // Generate UPI string dynamically
+      const upiString = `upi://pay?pa=henilpatel11.wallet@phonepe&pn=Peoni%20Beauty&am=${formData.amount_paid}&cu=INR&tn=Event%20Registration%20-%20${encodeURIComponent(formData.email)}`
+      
+      const qrDataURL = await QRCode.toDataURL(upiString, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+      
+      setQrCodeDataURL(qrDataURL)
+    } catch (error) {
+      console.error('Error generating QR code:', error)
+    }
+  }
+
+  // Generate QR code when email or amount changes
+  useEffect(() => {
+    if (formData.payment_method === 'online' && formData.email && formData.amount_paid) {
+      generateUPIQRCode()
+    }
+  }, [formData.email, formData.amount_paid, formData.payment_method])
 
   const fetchColleges = async () => {
     try {
@@ -671,6 +704,24 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
           console.error('Registration insertion error:', regError)
           throw regError
         }
+      }
+
+      // Send WhatsApp notification
+      try {
+        const whatsappResult = await sendRegistrationSuccessMessage({
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email
+        })
+        
+        if (whatsappResult.success) {
+          console.log('WhatsApp notification sent successfully')
+        } else {
+          console.warn('WhatsApp notification failed:', whatsappResult.error)
+        }
+      } catch (whatsappError) {
+        console.error('Error sending WhatsApp notification:', whatsappError)
+        // Don't fail the registration if WhatsApp fails
       }
 
       // Show success animation
@@ -1492,16 +1543,27 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                        </p>
                        <div className="flex justify-center">
                          <div className="bg-white p-4 rounded-lg shadow-lg">
-                           <img 
-                             src="/image/qr-code.png" 
-                             alt="Payment QR Code" 
-                             className="w-48 h-48 object-contain"
-                           />
+                           {qrCodeDataURL ? (
+                             <img 
+                               src={qrCodeDataURL} 
+                               alt="Payment QR Code" 
+                               className="w-48 h-48 object-contain"
+                             />
+                           ) : (
+                             <div className="w-48 h-48 flex items-center justify-center text-gray-500">
+                               {formData.email ? 'Generating QR Code...' : 'Enter email to generate QR code'}
+                             </div>
+                           )}
                          </div>
                        </div>
                        <p className="text-xs text-[#F6F9FF]/60 mt-3">
                          After payment, enter the transaction ID below
                        </p>
+                       {formData.email && (
+                         <p className="text-xs text-[#F6F9FF]/40 mt-2">
+                           Note: Payment includes your email for verification
+                         </p>
+                       )}
                      </div>
                    </div>
                  )}

@@ -18,6 +18,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { uploadImage } from '../utils/imageUpload'
+import { sendAttendanceConfirmationMessage } from '../lib/whatsappService'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import { Html5QrcodeScanType } from 'html5-qrcode'
 
@@ -581,7 +582,7 @@ const RegistrationCoordinator = () => {
       // Get user details for success message
       const { data: userData } = await supabase
         .from('users')
-        .select('name, email')
+        .select('name, email, phone')
         .eq('id', userId)
         .single()
 
@@ -590,6 +591,31 @@ const RegistrationCoordinator = () => {
         message: 'Attendance recorded successfully',
         user: userData?.name || 'User'
       })
+
+      // Send WhatsApp attendance confirmation
+      if (userData?.phone) {
+        try {
+          const whatsappResult = await sendAttendanceConfirmationMessage(
+            {
+              name: userData.name,
+              phone: userData.phone
+            },
+            {
+              eventName: selectedTarget.name,
+              timestamp: new Date().toISOString()
+            }
+          )
+          
+          if (whatsappResult.success) {
+            console.log('WhatsApp attendance confirmation sent successfully')
+          } else {
+            console.warn('WhatsApp attendance confirmation failed:', whatsappResult.error)
+          }
+        } catch (whatsappError) {
+          console.error('Error sending WhatsApp attendance confirmation:', whatsappError)
+          // Don't fail the attendance if WhatsApp fails
+        }
+      }
 
       // Refresh the participants list
       await refreshScannerParticipants()

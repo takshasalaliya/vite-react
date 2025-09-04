@@ -121,16 +121,23 @@ const Users = () => {
 	const handleSubmit = async (e) => {
 		e.preventDefault()
 		try {
+			// Clean up empty string values for UUID fields
+			const userDataToSave = {
+				...formData,
+				college_id: formData.college_id || null,
+				field_id: formData.field_id || null
+			}
+
 			if (editingUser) {
 				const { error } = await supabase
 					.from('users')
-					.update(formData)
+					.update(userDataToSave)
 					.eq('id', editingUser.id)
 				if (error) throw error
 			} else {
 				const { error } = await supabase
 					.from('users')
-					.insert([formData])
+					.insert([userDataToSave])
 				if (error) throw error
 			}
 			setShowModal(false)
