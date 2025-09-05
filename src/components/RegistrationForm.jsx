@@ -92,8 +92,13 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
     if (!formData.email || !formData.amount_paid) return
 
     try {
-      // Generate UPI string dynamically
-      const upiString = `upi://pay?pa=henilpatel11.wallet@phonepe&pn=Peoni%20Beauty&am=${formData.amount_paid}&cu=INR&tn=Event%20Registration%20-%20${encodeURIComponent(formData.email)}`
+      // Build UPI string with safe handling for bank per-transaction limits
+      const totalAmount = parseFloat(formData.amount_paid || '0')
+      const SAFE_LIMIT = 2000 // INR
+      const baseParams = `upi://pay?pa=henilpatel11.wallet@phonepe&pn=Peoni%20Beauty&cu=INR&tn=Event%20Registration%20-%20${encodeURIComponent(formData.email)}`
+      const upiString = totalAmount > SAFE_LIMIT
+        ? baseParams // omit amount to let the UPI app enter/split as needed
+        : `${baseParams}&am=${totalAmount.toFixed(2)}`
       
       const qrDataURL = await QRCode.toDataURL(upiString, {
         width: 200,
@@ -343,6 +348,71 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
   const handleInputChange = (e) => {
     const { name, value } = e.target
     
+    // Phone number validation - only allow numbers and limit to 10 digits
+    if (name === 'phone') {
+      // Remove any non-numeric characters
+      const numericValue = value.replace(/\D/g, '')
+      // Limit to 10 digits
+      const limitedValue = numericValue.slice(0, 10)
+      
+      setFormData(prev => ({
+        ...prev,
+        [name]: limitedValue
+      }))
+      
+      // Clear validation error if user is typing
+      if (validationErrors.phone) {
+        setValidationErrors(prev => ({
+          ...prev,
+          phone: ''
+        }))
+      }
+      
+      // Validate phone number format
+      if (limitedValue.length > 0) {
+        if (limitedValue.length < 10) {
+          setValidationErrors(prev => ({
+            ...prev,
+            phone: 'Phone number must be exactly 10 digits'
+          }))
+        } else {
+          // Only validate uniqueness if it's exactly 10 digits
+          validatePhone(limitedValue)
+        }
+      }
+      return
+    }
+    
+    // Email validation - basic format check
+    if (name === 'email') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }))
+      
+      // Clear validation error if user is typing
+      if (validationErrors.email) {
+        setValidationErrors(prev => ({
+          ...prev,
+          email: ''
+        }))
+      }
+      
+      // Basic email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (value && !emailRegex.test(value)) {
+        setValidationErrors(prev => ({
+          ...prev,
+          email: 'Please enter a valid email address'
+        }))
+      } else if (value && emailRegex.test(value)) {
+        // Only validate uniqueness if format is valid
+        validateEmail(value)
+      }
+      return
+    }
+    
+    // For other fields, update normally
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -355,11 +425,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
       }))
     }
 
-    if (name === 'email' && value) {
-      validateEmail(value)
-    } else if (name === 'phone' && value) {
-      validatePhone(value)
-    } else if (name === 'enrollment_number' && value) {
+    if (name === 'enrollment_number' && value) {
       validateEnrollmentNumber(value)
     } else if (name === 'transaction_id' && value) {
       validateTransactionId(value)
@@ -571,10 +637,17 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
   }
 
   const isFormValid = () => {
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const isEmailValid = formData.email && emailRegex.test(formData.email)
+    
+    // Phone number validation (exactly 10 digits)
+    const isPhoneValid = formData.phone && formData.phone.length === 10 && /^\d{10}$/.test(formData.phone)
+    
     return (
       formData.name &&
-      formData.email &&
-      formData.phone &&
+      isEmailValid &&
+      isPhoneValid &&
       formData.enrollment_number &&
       formData.college_id &&
       formData.field_id &&
@@ -1052,6 +1125,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       value={formData.email}
                       onChange={handleInputChange}
                       required
+                      placeholder="Enter your email address"
                        className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
                          validationErrors.email ? 'border-red-500' : 'border-[#C96F63]/30'
                       }`}
@@ -1066,6 +1140,11 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                         <AlertCircle className="h-4 w-4 text-red-500" />
                       </div>
                     )}
+                    {formData.email && !validationErrors.email && !isValidating.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) && (
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <Check className="h-4 w-4 text-green-500" />
+                      </div>
+                    )}
                   </div>
                   {validationErrors.email && (
                     <p className="mt-1 text-sm text-red-400">{validationErrors.email}</p>
@@ -1078,11 +1157,13 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                   </label>
                   <div className="relative">
                     <input
-                      type="text"
+                      type="tel"
                       name="phone"
                       value={formData.phone}
                       onChange={handleInputChange}
                       required
+                      placeholder="Enter 10-digit phone number"
+                      maxLength="10"
                        className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
                          validationErrors.phone ? 'border-red-500' : 'border-[#C96F63]/30'
                       }`}
@@ -1097,9 +1178,19 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                         <AlertCircle className="h-4 w-4 text-red-500" />
                       </div>
                     )}
+                    {formData.phone && formData.phone.length === 10 && !validationErrors.phone && (
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <Check className="h-4 w-4 text-green-500" />
+                      </div>
+                    )}
                   </div>
                   {validationErrors.phone && (
                     <p className="mt-1 text-sm text-red-400">{validationErrors.phone}</p>
+                  )}
+                  {formData.phone && formData.phone.length > 0 && formData.phone.length < 10 && (
+                    <p className="mt-1 text-sm text-[#FFCC66]">
+                      {10 - formData.phone.length} digits remaining
+                    </p>
                   )}
                 </div>
 
@@ -1246,6 +1337,37 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
 
               {/* Events, Workshops and Combos Selection */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Combos - First Priority */}
+                <div>
+                   <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
+                    Combos ({formData.selected_combos.length} selected)
+                  </label>
+                   <div className="max-h-48 overflow-y-auto border border-[#C96F63]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
+                    {combos.map(combo => (
+                                             <label key={combo.id} className="flex items-center space-x-3 py-2 hover:bg-[#0B1536]/50 rounded px-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="combo"
+                          checked={formData.selected_combos[0] === combo.id}
+                          onChange={(e) => handleComboChange(combo.id, e.target.checked)}
+                           className="h-4 w-4 text-[#C96F63] focus:ring-[#C96F63] border-[#C96F63]/30"
+                        />
+                        <div className="flex-1">
+                           <span className="text-sm font-medium text-[#F6F9FF]">
+                            {combo.name}
+                          </span>
+                           <span className="text-sm text-[#C96F63] ml-2">
+                            ₹{combo.price || 0}
+                          </span>
+                          {combo.combo_items?.some(ci => ci.target_type === 'event' && ci.target_name?.toLowerCase().includes('food')) && (
+                            <span className="ml-2 text-xs text-[#FFCC66]">Includes Food</span>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Technical Events */}
                 <div>
                    <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
@@ -1363,37 +1485,6 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                     })}
                   </div>
                 </div>
-
-                {/* Combos */}
-                <div>
-                   <label className="block text-sm font-medium text-[#F6F9FF] mb-2">
-                    Combos ({formData.selected_combos.length} selected)
-                  </label>
-                   <div className="max-h-48 overflow-y-auto border border-[#C96F63]/30 rounded-md p-3 bg-[#0B1536]/30 backdrop-blur-sm">
-                    {combos.map(combo => (
-                                             <label key={combo.id} className="flex items-center space-x-3 py-2 hover:bg-[#0B1536]/50 rounded px-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="combo"
-                          checked={formData.selected_combos[0] === combo.id}
-                          onChange={(e) => handleComboChange(combo.id, e.target.checked)}
-                           className="h-4 w-4 text-[#C96F63] focus:ring-[#C96F63] border-[#C96F63]/30"
-                        />
-                        <div className="flex-1">
-                           <span className="text-sm font-medium text-[#F6F9FF]">
-                            {combo.name}
-                          </span>
-                           <span className="text-sm text-[#C96F63] ml-2">
-                            ₹{combo.price || 0}
-                          </span>
-                          {combo.combo_items?.some(ci => ci.target_type === 'event' && ci.target_name?.toLowerCase().includes('food')) && (
-                            <span className="ml-2 text-xs text-[#FFCC66]">Includes Food</span>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               {/* Selection Summary */}
@@ -1406,6 +1497,39 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 )}
                  <div className="p-3 bg-[#0B1536]/30 rounded-md border border-[#C96F63]/30 backdrop-blur-sm">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                    <div>
+                       <span className="font-medium text-[#C96F63]">Combos:</span>
+                      <ul className="mt-1 space-y-1">
+                        {formData.selected_combos.map(comboId => {
+                          const combo = combos.find(c => c.id === comboId)
+                          const comboDetails = getComboDetails(comboId)
+                          return combo ? (
+                            <li key={comboId} className="space-y-1">
+                              <div className="flex justify-between">
+                                 <span className="text-[#F6F9FF] font-medium">{combo.name}</span>
+                                 <span className="font-medium text-[#C96F63]">₹{combo.price || 0}</span>
+                              </div>
+                              {(comboDetails.events.length > 0 || comboDetails.workshops.length > 0) && (
+                                <ul className="ml-4 space-y-1 text-xs">
+                                  {comboDetails.events.map(event => (
+                                     <li key={event.id} className="flex justify-between text-[#F6F9FF]/60">
+                                      <span>• {event.name}</span>
+                                       <span className="text-[#F6F9FF]/40">(included)</span>
+                                    </li>
+                                  ))}
+                                  {comboDetails.workshops.map(workshop => (
+                                     <li key={workshop.id} className="flex justify-between text-[#F6F9FF]/60">
+                                      <span>• {workshop.title}</span>
+                                       <span className="text-[#F6F9FF]/40">(included)</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
+                          ) : null
+                        })}
+                      </ul>
+                    </div>
                     <div>
                        <span className="font-medium text-[#C96F63]">Technical Events:</span>
                       <ul className="mt-1 space-y-1">
@@ -1448,40 +1572,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                         })}
                       </ul>
                     </div>
-                    <div>
-                       <span className="font-medium text-[#C96F63]">Combos:</span>
-                      <ul className="mt-1 space-y-1">
-                        {formData.selected_combos.map(comboId => {
-                          const combo = combos.find(c => c.id === comboId)
-                          const comboDetails = getComboDetails(comboId)
-                          return combo ? (
-                            <li key={comboId} className="space-y-1">
-                              <div className="flex justify-between">
-                                 <span className="text-[#F6F9FF] font-medium">{combo.name}</span>
-                                 <span className="font-medium text-[#C96F63]">₹{combo.price || 0}</span>
                               </div>
-                              {(comboDetails.events.length > 0 || comboDetails.workshops.length > 0) && (
-                                <ul className="ml-4 space-y-1 text-xs">
-                                  {comboDetails.events.map(event => (
-                                     <li key={event.id} className="flex justify-between text-[#F6F9FF]/60">
-                                      <span>• {event.name}</span>
-                                       <span className="text-[#F6F9FF]/40">(included)</span>
-                                    </li>
-                                  ))}
-                                  {comboDetails.workshops.map(workshop => (
-                                     <li key={workshop.id} className="flex justify-between text-[#F6F9FF]/60">
-                                      <span>• {workshop.title}</span>
-                                       <span className="text-[#F6F9FF]/40">(included)</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </li>
-                          ) : null
-                        })}
-                      </ul>
-                    </div>
-                  </div>
                                      <div className="border-t border-[#C96F63]/30 pt-2 mt-2">
                     <div className="flex justify-between text-sm font-bold">
                        <span className="text-[#FFCC66]">Total:</span>
@@ -1521,16 +1612,16 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                            {formData.payment_method === 'online' && (
                              <div className="w-2 h-2 bg-white rounded-full"></div>
                            )}
-                         </div>
+                    </div>
                 <div>
                            <div className="font-medium text-[#F6F9FF]">Online Payment</div>
                            <div className="text-sm text-[#F6F9FF]/60">Pay via UPI/Net Banking</div>
-                         </div>
-                       </div>
+                  </div>
+                    </div>
                      </label>
 
-                   </div>
-                 </div>
+                  </div>
+                </div>
 
                  {/* QR Code for Online Payment */}
                  {formData.payment_method === 'online' && (
@@ -1551,7 +1642,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                            ) : (
                              <div className="w-48 h-48 flex items-center justify-center text-gray-500">
                                {formData.email ? 'Generating QR Code...' : 'Enter email to generate QR code'}
-                             </div>
+              </div>
                            )}
                          </div>
                        </div>
@@ -1563,14 +1654,38 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                            Note: Payment includes your email for verification
                          </p>
                        )}
+                       
+                       {/* Tap to Pay Button */}
+                       <div className="mt-4">
+                         <button
+                           type="button"
+                           onClick={() => {
+                             const totalAmount = parseFloat(formData.amount_paid || '0')
+                             const SAFE_LIMIT = 2000 // INR
+                             const baseParams = `upi://pay?pa=henilpatel11.wallet@phonepe&pn=Peoni%20Beauty&cu=INR&tn=Event%20Registration%20-%20${encodeURIComponent(formData.email)}`
+                             const upiString = totalAmount > SAFE_LIMIT
+                               ? baseParams
+                               : `${baseParams}&am=${totalAmount.toFixed(2)}`
+                             window.open(upiString, '_blank')
+                           }}
+                           className="w-full bg-gradient-to-r from-[#C96F63] to-[#FF6B6B] hover:from-[#B85A5A] hover:to-[#E55A5A] text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2"
+                           disabled={!formData.email || !formData.amount_paid}
+                         >
+                           <span>💳</span>
+                           <span>Tap to Pay</span>
+                         </button>
+                         <p className="text-xs text-[#F6F9FF]/60 mt-2 text-center">
+                           Click to open payment in your UPI app
+                         </p>
+                       </div>
                      </div>
                    </div>
                  )}
 
                  {/* Transaction Details */}
                  <div className="space-y-4">
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                      <label className="block text-sm font-medium text-[#F6F9FF]">
                     Transaction ID *
                   </label>
@@ -1583,7 +1698,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       required
                         className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-[#C96F63] focus:border-[#C96F63] bg-[#0B1536]/50 text-[#F6F9FF] placeholder-[#F6F9FF]/40 backdrop-blur-sm ${
                           validationErrors.transaction_id ? 'border-red-500' : 'border-[#C96F63]/30'
-                        }`}
+                      }`}
                     />
                     {isValidating.transaction_id && (
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
