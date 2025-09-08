@@ -1632,19 +1632,7 @@
                           Amount: ₹{calculateTotalPrice().toFixed(2)}
                         </p>
                         <div className="flex justify-center">
-                          <div className="bg-white p-4 rounded-lg shadow-lg">
-                            {qrCodeDataURL ? (
-                              <img 
-                                src={qrCodeDataURL} 
-                                alt="Payment QR Code" 
-                                className="w-48 h-48 object-contain"
-                              />
-                            ) : (
-                              <div className="w-48 h-48 flex items-center justify-center text-gray-500">
-                                {formData.email ? 'Generating QR Code...' : 'Enter email to generate QR code'}
-                </div>
-                            )}
-                          </div>
+                         
                         </div>
                         <p className="text-xs text-[#F6F9FF]/60 mt-3">
                           After payment, enter the transaction ID or Phone Number(IF Cash) below
