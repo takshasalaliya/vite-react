@@ -20,12 +20,16 @@ const Users = () => {
 	const [errorMsg, setErrorMsg] = useState('')
 	const [searchTerm, setSearchTerm] = useState('')
 	const [selectedRole, setSelectedRole] = useState('')
+	const [selectedCollege, setSelectedCollege] = useState('')
+	const [selectedSemester, setSelectedSemester] = useState('')
+	const [selectedField, setSelectedField] = useState('')
 	const [showModal, setShowModal] = useState(false)
 	const [editingUser, setEditingUser] = useState(null)
 	const [colleges, setColleges] = useState([])
 	const [fields, setFields] = useState([])
 	const [currentPage, setCurrentPage] = useState(1)
 	const [totalPages, setTotalPages] = useState(1)
+	const [filteredTotal, setFilteredTotal] = useState(0)
 	const [pageSize] = useState(10)
 
 	const [formData, setFormData] = useState({
@@ -52,7 +56,13 @@ const Users = () => {
 		fetchUsers()
 		fetchColleges()
 		fetchFields()
-	}, [currentPage, searchTerm, selectedRole])
+	}, [currentPage, searchTerm, selectedRole, selectedCollege, selectedSemester, selectedField])
+
+	// Reset to first page whenever filters/search change
+	useEffect(() => {
+		setCurrentPage(1)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [searchTerm, selectedRole, selectedCollege, selectedSemester, selectedField])
 
 	const fetchUsers = async () => {
 		try {
@@ -75,15 +85,41 @@ const Users = () => {
 				query = query.eq('role', selectedRole)
 			}
 
+			if (selectedCollege) {
+				query = query.eq('college_id', selectedCollege)
+			}
+
+			if (selectedSemester) {
+				query = query.eq('semester', selectedSemester)
+			}
+
+			if (selectedField) {
+				query = query.eq('field_id', selectedField)
+			}
+
 			const from = (currentPage - 1) * pageSize
 			const to = from + pageSize - 1
 
 			const { data, error, count } = await query.range(from, to)
 
-			if (error) throw error
+			if (error) {
+				// Handle Range Not Satisfiable (416) by resetting to first page
+				const msg = (error?.message || '').toLowerCase()
+				if (error.status === 416 || msg.includes('range not satisfiable') || msg.includes('range') ) {
+					setCurrentPage(1)
+					return
+				}
+				throw error
+			}
 
 			setUsers(data || [])
-			setTotalPages(Math.ceil((count || 0) / pageSize))
+			setFilteredTotal(count || 0)
+			const pages = Math.max(1, Math.ceil((count || 0) / pageSize))
+			setTotalPages(pages)
+			// If current page exceeds available pages after filter, bring it back within bounds
+			if (currentPage > pages) {
+				setCurrentPage(1)
+			}
 		} catch (error) {
 			console.error('Error fetching users:', error)
 			setErrorMsg(error.message || 'Failed to load users')
@@ -313,7 +349,7 @@ const Users = () => {
 							/>
 						</div>
 					</div>
-					<div className="flex gap-2">
+					<div className="flex gap-2 flex-wrap items-center">
 						<select
 							value={selectedRole}
 							onChange={(e) => setSelectedRole(e.target.value)}
@@ -322,6 +358,36 @@ const Users = () => {
 							<option value="">All Roles</option>
 							{roles.map(role => (
 								<option key={role.value} value={role.value}>{role.label}</option>
+							))}
+						</select>
+						<select
+							value={selectedCollege}
+							onChange={(e) => setSelectedCollege(e.target.value)}
+							className="input-field"
+						>
+							<option value="">All Colleges</option>
+							{colleges.map(college => (
+								<option key={college.id} value={college.id}>{college.name}</option>
+							))}
+						</select>
+						<select
+							value={selectedSemester}
+							onChange={(e) => setSelectedSemester(e.target.value)}
+							className="input-field"
+						>
+							<option value="">All Semesters</option>
+							{Array.from({ length: 8 }, (_, i) => (i + 1).toString()).map(sem => (
+								<option key={sem} value={sem}>Sem {sem}</option>
+							))}
+						</select>
+						<select
+							value={selectedField}
+							onChange={(e) => setSelectedField(e.target.value)}
+							className="input-field"
+						>
+							<option value="">All Fields</option>
+							{fields.map(field => (
+								<option key={field.id} value={field.id}>{field.name}</option>
 							))}
 						</select>
 						<button
@@ -341,6 +407,7 @@ const Users = () => {
 								className="hidden"
 							/>
 						</label>
+						<span className="text-sm text-gray-600 dark:text-gray-300 ml-auto">Total: {filteredTotal}</span>
 					</div>
 				</div>
 			</div>
@@ -471,7 +538,7 @@ const Users = () => {
 							<div>
 								<p className="text-sm text-gray-700 dark;text-gray-300">
 									Showing page <span className="font-medium">{currentPage}</span> of{' '}
-									<span className="font-medium">{totalPages}</span>
+									<span className="font-medium">{totalPages}</span> · Total <span className="font-medium">{filteredTotal}</span>
 								</p>
 							</div>
 							<div>
