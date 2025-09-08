@@ -1627,7 +1627,7 @@
                   {formData.payment_method === 'online' && (
                     <div className="bg-[#0B1536]/30 rounded-lg border border-[#C96F63]/30 p-6 backdrop-blur-sm">
                       <div className="text-center">
-                        <h4 className="text-lg font-medium text-[#F6F9FF] mb-3">Scan QR Code to Pay</h4>
+                        <h4 className="text-lg font-medium text-[#F6F9FF] mb-3">Scan QR Code On Desk to Pay</h4>
                         <p className="text-sm text-[#F6F9FF]/60 mb-4">
                           Amount: ₹{calculateTotalPrice().toFixed(2)}
                         </p>
