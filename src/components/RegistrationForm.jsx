@@ -1647,7 +1647,7 @@
                           </div>
                         </div>
                         <p className="text-xs text-[#F6F9FF]/60 mt-3">
-                          After payment, enter the transaction ID below
+                          After payment, enter the transaction ID or Phone Number(IF Cash) below
                         </p>
                         {formData.email && (
                           <p className="text-xs text-[#F6F9FF]/40 mt-2">
@@ -1664,7 +1664,7 @@
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                       <label className="block text-sm font-medium text-[#F6F9FF]">
-                      Transaction ID *
+                      Transaction ID / IF Cash Then Phone Number *
                     </label>
                     <div className="relative">
                       <input
