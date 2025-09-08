@@ -90,6 +90,8 @@ const Home = () => {
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
       case 'combo':
         return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'free':
+        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
     }
@@ -105,6 +107,8 @@ const Home = () => {
         return 'Workshop'
       case 'combo':
         return 'Combo'
+      case 'free':
+        return 'Free Event'
       default:
         return category
     }
@@ -223,7 +227,8 @@ const Home = () => {
             <div className="px-4">
               <div className="flex w-full gap-1 sm:gap-2 bg-white/10 backdrop-blur-sm rounded-lg p-1 sm:p-2">
               {[
-                { id: 'events', label: 'Events', icon: Calendar, count: events.length },
+                { id: 'events', label: 'Events', icon: Calendar, count: events.filter(e => e.category !== 'food' && e.category !== 'free').length },
+                { id: 'free', label: 'Free Events', icon: Star, count: events.filter(e => e.category === 'free').length },
                 { id: 'workshops', label: 'Workshops', icon: BookOpen, count: workshops.length },
                 { id: 'combos', label: 'Combos', icon: Package, count: combos.length }
               ].map((tab) => {
@@ -254,7 +259,7 @@ const Home = () => {
           <div className="min-h-[400px]">
             {activeTab === 'events' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {events.filter(e => e.category !== 'food').map((event) => (
+                {events.filter(e => e.category !== 'food' && e.category !== 'free').map((event) => (
                   <div key={event.id} className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-hidden hover:bg-white/15 transition-all duration-300">
                     {event.photo_url && (
                       <img 
@@ -298,6 +303,53 @@ const Home = () => {
                 ))}
 						</div>
 					)}
+
+            {activeTab === 'free' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {events.filter(e => e.category === 'free').map((event) => (
+                  <div key={event.id} className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-hidden hover:bg-white/15 transition-all duration-300">
+                    {event.photo_url && (
+                      <img 
+                        src={event.photo_url} 
+                        alt={event.name}
+                        className="w-full h-48 object-cover"
+                      />
+                    )}
+                    <div className="p-4 sm:p-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${getCategoryColor(event.category)}`}>
+                          {getCategoryLabel(event.category)}
+                        </span>
+                        <span className="text-emerald-400 font-bold">FREE</span>
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold text-white mb-2">{event.name}</h3>
+                      <p className="text-[#F6F9FF]/70 text-sm sm:text-base mb-4 line-clamp-3">
+                        {event.description}
+                      </p>
+                      <div className="space-y-2 text-sm text-[#F6F9FF]/60">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4" />
+                          <span>{formatDate(event.created_at)}</span>
+                        </div>
+                        {event.max_participants && (
+                          <div className="flex items-center space-x-2">
+                            <Users className="w-4 h-4" />
+                            <span>Max: {event.max_participants} participants</span>
+                          </div>
+                        )}
+                      </div>
+                      <Link
+                        to="/register"
+                        className="mt-4 inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors"
+                      >
+                        Register Now
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 					
             {activeTab === 'workshops' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
