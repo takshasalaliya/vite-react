@@ -52,6 +52,7 @@ const RegistrationCoordinator = () => {
   const [showScanModal, setShowScanModal] = useState(false)
   const [scanResult, setScanResult] = useState(null)
   const qrScannerRef = useRef(null)
+  const [lastAttendanceTime, setLastAttendanceTime] = useState(null)
   
   // Single target selection for scanner (only one event/workshop at a time)
   const [selectedTarget, setSelectedTarget] = useState(null) // {id, type, name}
@@ -488,6 +489,19 @@ const RegistrationCoordinator = () => {
 
   const onScanSuccess = async (decodedText, decodedResult) => {
     try {
+      // Check for 20-second cooldown after last attendance
+      if (lastAttendanceTime) {
+        const timeSinceLastAttendance = Date.now() - lastAttendanceTime
+        if (timeSinceLastAttendance < 20000) { // 20 seconds = 20000ms
+          const remainingTime = Math.ceil((20000 - timeSinceLastAttendance) / 1000)
+          setScanResult({
+            success: false,
+            message: `Please wait ${remainingTime} seconds before scanning next attendance`
+          })
+          return
+        }
+      }
+      
       // Parse QR code data
       let qrData
       try {
@@ -578,6 +592,9 @@ const RegistrationCoordinator = () => {
         .insert([attendanceRecord])
 
       if (attendanceError) throw attendanceError
+      
+      // Set the last attendance time for cooldown
+      setLastAttendanceTime(Date.now())
 
       // Get user details for success message
       const { data: userData } = await supabase
@@ -1864,7 +1881,7 @@ const RegistrationCoordinator = () => {
   }
 
 
-  
+
   // Filter users by payment status
   const filteredUsers = users.filter(user => {
     if (paymentFilter === 'all') return true
@@ -1874,6 +1891,86 @@ const RegistrationCoordinator = () => {
     
     return user.registrations.some(reg => reg.payment_status === paymentFilter)
   })
+
+  // CSV Export helper
+  const csvEscape = (value) => {
+    if (value === null || value === undefined) return ''
+    const str = String(value)
+    if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+      return '"' + str.replace(/"/g, '""') + '"'
+    }
+    return str
+  }
+
+  const getRegistrationTargetName = (reg) => {
+    if (!reg) return ''
+    if (reg.target_type === 'combo') {
+      const combo = combos.find(c => c.id === reg.target_id)
+      return combo ? combo.title : 'Combo'
+    }
+    if (reg.target_type === 'event') {
+      const ev = events.find(e => e.id === reg.target_id)
+      return ev ? ev.title : 'Event'
+    }
+    if (reg.target_type === 'workshop') {
+      const ws = workshops.find(w => w.id === reg.target_id)
+      return ws ? ws.title : 'Workshop'
+    }
+    return ''
+  }
+
+  const exportRegistrationsCSV = () => {
+    try {
+      // Build rows: one per user (merged registrations)
+      const headers = ['Name', 'Email', 'Transaction ID', 'Mobile', 'Payment Status', 'Event/Combo']
+      const rows = [headers]
+      filteredUsers.forEach(user => {
+        const regs = (user.registrations || []).filter(reg => paymentFilter === 'all' || reg.payment_status === paymentFilter)
+        if (regs.length === 0) return
+
+        // If any combo registrations, show only combo name(s)
+        const comboRegs = regs.filter(r => r.target_type === 'combo')
+        let label = ''
+        if (comboRegs.length > 0) {
+          const comboNames = Array.from(new Set(comboRegs.map(r => getRegistrationTargetName(r)).filter(Boolean)))
+          label = comboNames.join(' | ')
+        } else {
+          // Merge events and workshops titles
+          const names = Array.from(new Set(regs.map(r => getRegistrationTargetName(r)).filter(Boolean)))
+          label = names.join(' | ')
+        }
+
+        // Merge transaction IDs
+        const transactionIds = Array.from(new Set(regs.map(r => r.transaction_id).filter(Boolean)))
+        const transactionIdMerged = transactionIds.join(' | ')
+
+        // Merge payment status
+        const statuses = Array.from(new Set(regs.map(r => r.payment_status).filter(Boolean)))
+        const paymentStatusMerged = statuses.length === 1 ? statuses[0] : 'mixed'
+
+        rows.push([
+          csvEscape(user.name || ''),
+          csvEscape(user.email || ''),
+          csvEscape(transactionIdMerged),
+          csvEscape(user.phone || ''),
+          csvEscape(paymentStatusMerged),
+          csvEscape(label)
+        ])
+      })
+      const csvContent = rows.map(r => r.join(',')).join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `registrations_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error exporting CSV:', err)
+    }
+  }
 
   return (
     <>
@@ -1899,6 +1996,15 @@ const RegistrationCoordinator = () => {
             >
               <UserPlus className="mr-2 h-5 w-5" />
               Add User
+            </button>
+          )}
+          {activeTab === 'users' && (
+            <button
+              onClick={exportRegistrationsCSV}
+              className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 w-full sm:w-auto"
+            >
+              <Download className="mr-2 h-5 w-5" />
+              Export CSV
             </button>
           )}
           {activeTab === 'eventParticipants' && (
