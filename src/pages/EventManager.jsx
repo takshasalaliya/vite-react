@@ -529,7 +529,8 @@ const EventManager = () => {
   const categories = [
     { value: 'tech', label: 'Tech' },
     { value: 'non-tech', label: 'Non-Tech' },
-    { value: 'food', label: 'Food' }
+    { value: 'food', label: 'Food' },
+    { value: 'free', label: 'Free' }
   ]
 
   if (loading) {
