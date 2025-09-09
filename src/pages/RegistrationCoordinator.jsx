@@ -172,6 +172,7 @@ const RegistrationCoordinator = () => {
           id,
           name,
           email,
+          pay_photo,
           phone,
           enrollment_number,
           college_id,
@@ -183,6 +184,8 @@ const RegistrationCoordinator = () => {
             target_type,
             target_id,
             payment_status,
+            transaction_id,
+            amount_paid,
             created_at
           )
         `)
@@ -2152,6 +2155,11 @@ const RegistrationCoordinator = () => {
                             <div className="text-sm text-gray-500 dark:text-gray-400">
                               {user.email}
                             </div>
+                            {user.phone && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {user.phone}
+                              </div>
+                            )}
                             {user.enrollment_number && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">
                                 Enrollment: {user.enrollment_number}
@@ -2276,6 +2284,18 @@ const RegistrationCoordinator = () => {
                                          ₹{user.registrations.reduce((sum, reg) => sum + (reg.amount_paid || 0), 0).toFixed(2)}
                                        </span>
                                      </div>
+                                     {user.pay_photo && (
+                                       <div className="flex items-center justify-between text-xs font-medium mt-2">
+                                         <span className="text-gray-700 dark:text-gray-300">Payment Photo:</span>
+                                         <a href={user.pay_photo} target="_blank" rel="noreferrer" className="ml-2">
+                                           <img
+                                             src={user.pay_photo}
+                                             alt="Payment"
+                                             className="h-10 w-10 rounded object-cover border border-gray-200 dark:border-gray-600"
+                                           />
+                                         </a>
+                                       </div>
+                                     )}
                                    </div>
                                  )}
                               </div>
