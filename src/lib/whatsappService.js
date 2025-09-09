@@ -86,6 +86,8 @@ Thank you for registering with us!
 Best regards,
 Event Management Team
 
+wesite link:- https://innostra.vercel.app
+
 📩 For any queries, please contact Rudra Patel: +919426532062`
 
   return await sendWhatsAppMessage(phone, message)
