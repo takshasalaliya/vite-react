@@ -165,11 +165,30 @@ const RegistrationCoordinator = () => {
       setLoading(true)
       console.log('RegistrationCoordinator: Fetching users...')
       
+      // Reduce payload size and avoid N+1 queries to prevent timeouts
       let query = supabase
         .from('users')
-        .select('*, registrations(*)')
+        .select(`
+          id,
+          name,
+          email,
+          phone,
+          enrollment_number,
+          college_id,
+          field_id,
+          semester,
+          created_at,
+          registrations(
+            id,
+            target_type,
+            target_id,
+            payment_status,
+            created_at
+          )
+        `)
         .eq('role', 'participant')
         .order('created_at', { ascending: false })
+        .limit(500)
 
       if (searchTerm) {
         query = query.or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,enrollment_number.ilike.%${searchTerm}%`)
@@ -182,41 +201,9 @@ const RegistrationCoordinator = () => {
         return
       }
       
-      // Fetch detailed registration data for each user
-      const usersWithDetails = await Promise.all(
-        (data || []).map(async (user) => {
-          try {
-            // Fetch all registrations for the user (including combo items)
-            const { data: registrationDetails, error: regError } = await supabase
-              .from('registrations')
-              .select('*')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false });
-            
-            if (regError) {
-              console.error('Error fetching registration details for user:', user.id, regError);
-              return {
-                ...user,
-                registrations: []
-              };
-            }
-            
-            return {
-              ...user,
-              registrations: registrationDetails || []
-            };
-          } catch (error) {
-            console.error('Error fetching registration details for user:', user.id, error);
-            return {
-              ...user,
-              registrations: []
-            };
-          }
-        })
-      );
-      
-      console.log('RegistrationCoordinator: Users fetched:', usersWithDetails.length)
-      setUsers(usersWithDetails)
+      // Already have registrations from the nested select; no per-user fetch needed
+      console.log('RegistrationCoordinator: Users fetched:', (data || []).length)
+      setUsers(data || [])
     } catch (error) {
       console.error('Error in fetchUsers:', error)
     } finally {
