@@ -34,6 +34,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
   const [showSuccess, setShowSuccess] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [uploadingPayPhoto, setUploadingPayPhoto] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [qrCodeDataURL, setQrCodeDataURL] = useState('')
 
   const [validationErrors, setValidationErrors] = useState({
@@ -569,18 +570,41 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
 
     try {
       setUploadingPayPhoto(true)
+      setUploadProgress(0)
+      
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval)
+            return prev
+          }
+          return prev + Math.random() * 15
+        })
+      }, 200)
       
       // Validate the image file first
       validateImage(file)
       
       const payPhotoUrl = await uploadImage(file)
+      
+      // Complete the progress
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+      
       setFormData(prev => ({
         ...prev,
         pay_photo: payPhotoUrl
       }))
+
+      // Reset progress after a short delay
+      setTimeout(() => {
+        setUploadProgress(0)
+      }, 1000)
     } catch (error) {
       console.error('Error uploading payment photo:', error)
       alert(`Error uploading payment photo: ${error.message}`)
+      setUploadProgress(0)
     } finally {
       setUploadingPayPhoto(false)
     }
@@ -680,6 +704,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
       formData.payment_method &&
       formData.transaction_id &&
       formData.amount_paid &&
+      formData.pay_photo &&
       !validationErrors.email &&
       !validationErrors.phone &&
       !validationErrors.enrollment_number &&
@@ -1729,7 +1754,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                 {/* Payment Photo Upload */}
                 <div>
                   <label className="block text-sm font-medium text-[#F6F9FF]">
-                    Payment Screenshot/Receipt
+                    Payment Screenshot/Receipt *
                   </label>
                   <div className="mt-1 flex items-center">
                     <input
@@ -1748,7 +1773,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                       {uploadingPayPhoto ? (
                         <div className="flex items-center space-x-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#C96F63]"></div>
-                          <span>Uploading...</span>
+                          <span>Uploading... {Math.round(uploadProgress)}%</span>
                         </div>
                       ) : (
                         <div className="flex items-center space-x-2">
@@ -1757,7 +1782,17 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                         </div>
                       )}
                     </label>
-                    {formData.pay_photo && (
+                    {uploadingPayPhoto && (
+                      <div className="ml-3 w-32">
+                        <div className="w-full bg-[#0B1536]/30 rounded-full h-2">
+                          <div 
+                            className="bg-[#C96F63] h-2 rounded-full transition-all duration-300 ease-out"
+                            style={{ width: `${uploadProgress}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                    {formData.pay_photo && !uploadingPayPhoto && (
                       <div className="ml-3 flex items-center space-x-2">
                         <Check className="h-4 w-4 text-green-400" />
                         <span className="text-sm text-green-400">Payment photo uploaded</span>
@@ -1772,7 +1807,7 @@ const RegistrationForm = ({ isOpen, onClose, onSuccess }) => {
                     )}
                   </div>
                   <p className="mt-1 text-xs text-[#F6F9FF]/60">
-                    Upload a screenshot or photo of your payment confirmation (optional)
+                    Upload a screenshot or photo of your payment confirmation
                   </p>
                 </div>
                 </div>
