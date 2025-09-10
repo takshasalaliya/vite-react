@@ -116,7 +116,7 @@ const Home = () => {
 
 	const handleRegistrationClick = (e) => {
 		e.preventDefault()
-		alert('Registration is closed. Please contact +91 9426532062 (Rudra Patl)')
+		alert('Registration is closed. Please contact +91 9426532062 (Rudra Patel)')
 	}
 
   if (loading) {
