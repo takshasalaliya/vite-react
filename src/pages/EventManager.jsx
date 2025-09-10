@@ -505,15 +505,19 @@ const EventManager = () => {
     if (!selectedEvent || !participations.length) return
 
     const csvData = [
-      ['Name', 'Email', 'Phone', 'Payment Status', 'Amount Paid', 'Registration Date'],
-      ...participations.map(p => [
-        p.users?.name || 'N/A',
-        p.users?.email || 'N/A',
-        p.users?.phone || 'N/A',
-        p.payment_status,
-        p.amount_paid || 0,
-        new Date(p.created_at).toLocaleDateString()
-      ])
+      ['Name', 'Email', 'Phone', 'College', 'Payment Status', 'Amount Paid', 'Registration Date'],
+      ...participations.map(p => {
+        const collegeName = colleges.find(c => c.id === (p.users?.college_id || ''))?.name || 'N/A'
+        return [
+          p.users?.name || 'N/A',
+          p.users?.email || 'N/A',
+          p.users?.phone || 'N/A',
+          collegeName,
+          p.payment_status,
+          p.amount_paid || 0,
+          new Date(p.created_at).toLocaleDateString()
+        ]
+      })
     ]
 
     const csvContent = csvData.map(row => row.join(',')).join('\n')
