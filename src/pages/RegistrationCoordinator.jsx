@@ -40,6 +40,9 @@ const RegistrationCoordinator = () => {
   const [colleges, setColleges] = useState([])
   const [fields, setFields] = useState([])
   const [paymentFilter, setPaymentFilter] = useState('all')
+  const [collegeFilter, setCollegeFilter] = useState('')
+  const [semesterFilter, setSemesterFilter] = useState('')
+  const [fieldFilter, setFieldFilter] = useState('')
   const [workshops, setWorkshops] = useState([]);
   const [combos, setCombos] = useState([]);
 
@@ -49,6 +52,7 @@ const RegistrationCoordinator = () => {
   
   // QR Scanner state
   const [scanning, setScanning] = useState(false)
+  const [processingScan, setProcessingScan] = useState(false)
   const [showScanModal, setShowScanModal] = useState(false)
   const [scanResult, setScanResult] = useState(null)
   const qrScannerRef = useRef(null)
@@ -478,6 +482,20 @@ const RegistrationCoordinator = () => {
   }
 
   const onScanSuccess = async (decodedText, decodedResult) => {
+    console.log('QR Code scanned:', decodedText)
+    console.log('Current scanning state:', { scanning, processingScan })
+    
+    // Prevent multiple simultaneous scans - only check processingScan, not scanning
+    if (processingScan) {
+      console.log('Scan blocked - already processing')
+      return
+    }
+    
+    // Set processing state to prevent multiple scans
+    setProcessingScan(true)
+    setScanning(false)
+    console.log('Processing scan started')
+    
     try {
       // Check for 20-second cooldown after last attendance
       if (lastAttendanceTime) {
@@ -488,6 +506,8 @@ const RegistrationCoordinator = () => {
             success: false,
             message: `Please wait ${remainingTime} seconds before scanning next attendance`
           })
+          setProcessingScan(false)
+          setScanning(true)
           return
         }
       }
@@ -501,10 +521,13 @@ const RegistrationCoordinator = () => {
       }
 
       const userId = qrData.user_id || qrData.userId
+      console.log('Parsed user ID:', userId)
       if (!userId) {
         throw new Error('Invalid QR code format')
       }
 
+      console.log('Selected target:', selectedTarget)
+      
       // Check if user has approved registration for selected target (direct)
       const { data: directRegs, error: directErr } = await supabase
         .from('registrations')
@@ -515,6 +538,7 @@ const RegistrationCoordinator = () => {
         .eq('payment_status', 'approved')
       if (directErr) throw directErr
 
+      console.log('Direct registrations found:', directRegs)
       let isApprovedForTarget = (directRegs && directRegs.length > 0)
 
       // If no direct approval, check if user has an approved combo that includes this target
@@ -540,15 +564,20 @@ const RegistrationCoordinator = () => {
         }
       }
 
+      console.log('User approved for target:', isApprovedForTarget)
+      
       if (!isApprovedForTarget) {
+        console.log('User not approved for target')
         setScanResult({
           success: false,
           message: 'User not registered for selected target or payment not approved'
         })
+        setProcessingScan(false)
+        setScanning(true)
         return
       }
 
-      // Check if already attended
+      // Check if already attended (with double-check to prevent race conditions)
       const { data: existingAttendance } = await supabase
         .from('attendance')
         .select('*')
@@ -556,11 +585,16 @@ const RegistrationCoordinator = () => {
         .eq('target_id', selectedTarget.id)
         .eq('target_type', selectedTarget.type)
 
+      console.log('Existing attendance check:', existingAttendance)
+
       if (existingAttendance && existingAttendance.length > 0) {
+        console.log('User already attended')
         setScanResult({
           success: false,
           message: 'User already attended this target'
         })
+        setProcessingScan(false)
+        setScanning(true)
         return
       }
 
@@ -568,7 +602,7 @@ const RegistrationCoordinator = () => {
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       const currentUserId = currentUser?.id
 
-      // Record attendance for selected target
+      // Record attendance for selected target with duplicate prevention
       const attendanceRecord = {
         user_id: userId,
         target_type: selectedTarget.type,
@@ -577,11 +611,28 @@ const RegistrationCoordinator = () => {
         scan_time: new Date().toISOString()
       }
 
+      console.log('Inserting attendance record:', attendanceRecord)
+
       const { error: attendanceError } = await supabase
         .from('attendance')
         .insert([attendanceRecord])
 
-      if (attendanceError) throw attendanceError
+      if (attendanceError) {
+        console.error('Attendance insertion error:', attendanceError)
+        // Handle duplicate key error (unique constraint violation)
+        if (attendanceError.code === '23505') {
+          setScanResult({
+            success: false,
+            message: 'User already attended this target'
+          })
+          setProcessingScan(false)
+          setScanning(true)
+          return
+        }
+        throw attendanceError
+      }
+
+      console.log('Attendance recorded successfully!')
       
       // Set the last attendance time for cooldown
       setLastAttendanceTime(Date.now())
@@ -628,17 +679,32 @@ const RegistrationCoordinator = () => {
       await refreshScannerParticipants()
 
       // Keep scanner open for multiple scans; briefly show success then resume
+      // Add 2-second cooldown after scanning to prevent rapid successive scans
       setTimeout(() => {
         setScanResult(null)
+        setProcessingScan(false)
         setScanning(true)
-      }, 1500)
+      }, 2000) // Increased from 1500ms to 2000ms for 2-second cooldown
 
     } catch (error) {
       console.error('Error processing scan:', error)
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      })
       setScanResult({
         success: false,
         message: 'Error processing scan: ' + error.message
       })
+      
+      // Add 2-second cooldown after error to prevent rapid successive scans
+      setTimeout(() => {
+        setScanResult(null)
+        setProcessingScan(false)
+        setScanning(true)
+      }, 2000)
     }
   }
 
@@ -1909,12 +1975,83 @@ const RegistrationCoordinator = () => {
     return ''
   }
 
-  const exportRegistrationsCSV = () => {
+  const exportRegistrationsCSV = async () => {
     try {
+      setLoading(true)
+      
+      // Fetch ALL users that match current filters (not just paginated ones)
+      let query = supabase
+        .from('users')
+        .select(`
+          id,
+          name,
+          email,
+          phone,
+          enrollment_number,
+          college_id,
+          field_id,
+          semester,
+          created_at,
+          registrations(
+            id,
+            target_type,
+            target_id,
+            payment_status,
+            transaction_id,
+            amount_paid,
+            created_at
+          )
+        `)
+        .order('created_at', { ascending: false })
+
+      // Apply college filter
+      if (collegeFilter) {
+        query = query.eq('college_id', collegeFilter)
+      }
+
+      // Apply semester filter
+      if (semesterFilter) {
+        query = query.eq('semester', semesterFilter)
+      }
+
+      // Apply field filter
+      if (fieldFilter) {
+        query = query.eq('field_id', fieldFilter)
+      }
+
+      // Apply search filter
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,enrollment_number.ilike.%${searchTerm}%`)
+      }
+
+      const { data: allUsers, error } = await query
+
+      if (error) {
+        console.error('Error fetching users for export:', error)
+        alert('Error fetching users for export. Please try again.')
+        return
+      }
+
+      console.log('Export: Fetched users count:', allUsers?.length || 0)
+
+      // Filter users by payment status (same logic as filteredUsers)
+      const exportUsers = allUsers.filter(user => {
+        if (paymentFilter === 'all') return true
+        
+        const hasRegistrations = user.registrations && user.registrations.length > 0
+        if (!hasRegistrations) return false
+        
+        return user.registrations.some(reg => reg.payment_status === paymentFilter)
+      })
+
+      console.log('Export: Filtered users count:', exportUsers.length)
+      console.log('Export: Payment filter:', paymentFilter)
+
       // Build rows: one per user (merged registrations)
       const headers = ['Name', 'Email', 'Transaction ID', 'Mobile', 'Payment Status', 'Event/Combo']
       const rows = [headers]
-      filteredUsers.forEach(user => {
+      
+      exportUsers.forEach(user => {
         const regs = (user.registrations || []).filter(reg => paymentFilter === 'all' || reg.payment_status === paymentFilter)
         if (regs.length === 0) return
 
@@ -1947,6 +2084,9 @@ const RegistrationCoordinator = () => {
           csvEscape(label)
         ])
       })
+      
+      console.log('Export: Final CSV rows count:', rows.length - 1) // -1 for header
+      
       const csvContent = rows.map(r => r.join(',')).join('\n')
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
@@ -1959,6 +2099,9 @@ const RegistrationCoordinator = () => {
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Error exporting CSV:', err)
+      alert('Error exporting CSV. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
