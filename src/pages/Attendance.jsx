@@ -40,6 +40,7 @@ const Attendance = () => {
   const [searchUser, setSearchUser] = useState('')
   const [scanSessionCount, setScanSessionCount] = useState(0)
   const [lastUpdate, setLastUpdate] = useState(new Date())
+  const [lastAttendanceTime, setLastAttendanceTime] = useState(null)
   
   const scannerRef = useRef(null)
   const qrScannerRef = useRef(null)
@@ -252,9 +253,28 @@ const Attendance = () => {
   }
 
   const onScanSuccess = async (decodedText, decodedResult) => {
-    // Prevent multiple simultaneous scans
-    if (!scanning || processingScan) {
+    console.log('Attendance: QR Code scanned:', decodedText)
+    console.log('Attendance: Current scanning state:', { scanning, processingScan })
+    
+    // Prevent multiple simultaneous scans - only check processingScan, not scanning
+    if (processingScan) {
+      console.log('Attendance: Scan blocked - already processing')
       return
+    }
+    
+    // Check for 20-second cooldown after last attendance
+    if (lastAttendanceTime) {
+      const timeSinceLastAttendance = Date.now() - lastAttendanceTime
+      if (timeSinceLastAttendance < 20000) { // 20 seconds = 20000ms
+        const remainingTime = Math.ceil((20000 - timeSinceLastAttendance) / 1000)
+        setScanResult({
+          success: false,
+          message: `Please wait ${remainingTime} seconds before scanning next attendance`
+        })
+        setProcessingScan(false)
+        setScanning(true)
+        return
+      }
     }
     
     // Set processing state to prevent multiple scans
@@ -272,6 +292,7 @@ const Attendance = () => {
       }
 
       const userId = qrData.user_id || qrData.userId
+      console.log('Attendance: Parsed user ID:', userId)
       if (!userId) {
         throw new Error('Invalid QR code format')
       }
@@ -281,18 +302,26 @@ const Attendance = () => {
       try {
         registrations = await validateUserRegistrations(userId)
       } catch (validationError) {
+        console.log('Attendance: Validation error:', validationError.message)
         setScanResult({
           success: false,
           message: validationError.message
         })
+        setProcessingScan(false)
+        setScanning(true)
         return
       }
       
+      console.log('Attendance: Valid registrations found:', registrations.length)
+      
       if (registrations.length === 0) {
+        console.log('Attendance: No valid registrations')
         setScanResult({
           success: false,
           message: 'User not eligible: No approved registrations for selected targets or event not currently active'
         })
+        setProcessingScan(false)
+        setScanning(true)
         return
       }
 
@@ -363,6 +392,8 @@ const Attendance = () => {
             }
           } else if (data && data.length > 0) {
             attendanceRecorded++
+            // Set the last attendance time for cooldown
+            setLastAttendanceTime(Date.now())
           }
         } catch (insertError) {
           if (insertError.code === '23505') { // Unique constraint violation
@@ -402,11 +433,12 @@ const Attendance = () => {
        fetchAttendanceLogs()
 
        // Keep scanner open for multiple scans, just reset the result after showing
+       // Add 2-second cooldown after scanning to prevent rapid successive scans
        setTimeout(() => {
          setScanResult(null)
          setProcessingScan(false)
          setScanning(true) // Re-enable scanning for next user
-       }, 3000) // Show result for 3 seconds then reset
+       }, 2000) // Show result for 2 seconds then reset
 
     } catch (error) {
       console.error('Error processing scan:', error)
@@ -414,6 +446,13 @@ const Attendance = () => {
         success: false,
         message: error.message
       })
+      
+      // Add 2-second cooldown after error to prevent rapid successive scans
+      setTimeout(() => {
+        setScanResult(null)
+        setProcessingScan(false)
+        setScanning(true) // Re-enable scanning for next attempt
+      }, 2000)
     }
   }
 
@@ -717,9 +756,9 @@ const Attendance = () => {
           {selectedTargets.length > 0 && (
             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
               <div className="flex justify-between items-center">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>Selected:</strong> {selectedTargets.length} target(s) - Scanning mode active
-                </p>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <strong>Selected:</strong> {selectedTargets.length} target(s) - Scanning mode active
+              </p>
                 <button
                   onClick={() => setSelectedTargets([])}
                   className="text-xs text-blue-600 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-100 underline"
