@@ -612,24 +612,110 @@ const Attendance = () => {
     })
   }
 
-  const exportToCSV = () => {
-    const ws = XLSX.utils.json_to_sheet(attendanceLogs.map(log => ({
-      'User Name': log.users?.name || 'N/A',
-      'College': log.users?.colleges?.name || 'N/A',
-      'Field': log.users?.fields?.name || 'N/A',
-      'Semester': log.users?.semester || 'N/A',
-      'Enrollment Number': log.users?.enrollment_number || 'N/A',
-      'Phone Number': log.users?.phone || 'N/A',
-      'Attendance Status': 'Present',
-      'Event Name': log.targetName || 'N/A',
-      'Target Type': log.target_type,
-      'Scan Time': new Date(log.scan_time).toLocaleString(),
-      'Scanned By': log.scanned_by || 'System'
-    })))
-    
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Attendance')
-    XLSX.writeFile(wb, 'attendance-export.xlsx')
+  const exportToCSV = async () => {
+    try {
+      setLoading(true)
+      
+      // Fetch ALL attendance records (not just paginated ones)
+      let query = supabase
+        .from('attendance')
+        .select(`
+          id, user_id, target_type, target_id, scan_time, scanned_by
+        `)
+        .order('scan_time', { ascending: false })
+
+      // Apply same filters as the main query
+      if (dateRange.start) {
+        query = query.gte('scan_time', dateRange.start)
+      }
+
+      if (dateRange.end) {
+        query = query.lte('scan_time', dateRange.end + 'T23:59:59')
+      }
+
+      const { data: allAttendanceData, error } = await query
+
+      if (error) {
+        console.error('Error fetching attendance data for export:', error)
+        alert('Error fetching attendance data. Please try again.')
+        return
+      }
+
+      console.log('Export: Fetched attendance records count:', allAttendanceData?.length || 0)
+
+      // Fetch target names and user details for all records
+      const eventIds = Array.from(new Set((allAttendanceData || []).filter(l => l.target_type === 'event').map(l => l.target_id)))
+      const workshopIds = Array.from(new Set((allAttendanceData || []).filter(l => l.target_type === 'workshop').map(l => l.target_id)))
+      const userIds = Array.from(new Set((allAttendanceData || []).map(l => l.user_id)))
+
+      const [eventsRes, workshopsRes, usersRes] = await Promise.all([
+        eventIds.length ? supabase.from('events').select('id, name').in('id', eventIds) : Promise.resolve({ data: [] }),
+        workshopIds.length ? supabase.from('workshops').select('id, title').in('id', workshopIds) : Promise.resolve({ data: [] }),
+        userIds.length ? supabase.from('users').select(`
+          id, name, email, enrollment_number, phone, semester,
+          college_id, field_id,
+          colleges!college_id(name),
+          fields!field_id(name)
+        `).in('id', userIds) : Promise.resolve({ data: [] })
+      ])
+
+      const eventsMap = new Map((eventsRes.data || []).map(e => [e.id, e.name]))
+      const workshopsMap = new Map((workshopsRes.data || []).map(w => [w.id, w.title]))
+      const usersMap = new Map((usersRes.data || []).map(u => [u.id, u]))
+
+      // Process all attendance records
+      let processedLogs = (allAttendanceData || []).map(log => ({
+        ...log,
+        users: usersMap.get(log.user_id) || null,
+        targetName: log.target_type === 'event' ? (eventsMap.get(log.target_id) || '') : (workshopsMap.get(log.target_id) || '')
+      }))
+
+      // Apply client-side search filter if active
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        processedLogs = processedLogs.filter(l => (
+          (l.users?.name || '').toLowerCase().includes(term) ||
+          (l.users?.email || '').toLowerCase().includes(term) ||
+          (l.users?.enrollment_number || '').toLowerCase().includes(term)
+        ))
+      }
+
+      // Apply client-side target filtering if active
+      if (selectedTargets && selectedTargets.length > 0) {
+        processedLogs = processedLogs.filter(l => 
+          selectedTargets.some(target => 
+            target.id === l.target_id && target.type === l.target_type
+          )
+        )
+      }
+
+      console.log('Export: Final processed records count:', processedLogs.length)
+
+      // Create Excel file
+      const ws = XLSX.utils.json_to_sheet(processedLogs.map(log => ({
+        'User Name': log.users?.name || 'N/A',
+        'College': log.users?.colleges?.name || 'N/A',
+        'Field': log.users?.fields?.name || 'N/A',
+        'Semester': log.users?.semester || 'N/A',
+        'Enrollment Number': log.users?.enrollment_number || 'N/A',
+        'Phone Number': log.users?.phone || 'N/A',
+        'Attendance Status': 'Present',
+        'Event Name': log.targetName || 'N/A',
+        'Target Type': log.target_type,
+        'Scan Time': new Date(log.scan_time).toLocaleString(),
+        'Scanned By': log.scanned_by || 'System'
+      })))
+      
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Attendance')
+      XLSX.writeFile(wb, `attendance-export-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`)
+      
+    } catch (error) {
+      console.error('Error exporting attendance data:', error)
+      alert('Error exporting attendance data. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const clearFilters = () => {
