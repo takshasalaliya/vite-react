@@ -131,7 +131,12 @@ const Attendance = () => {
       const [eventsRes, workshopsRes, usersRes] = await Promise.all([
         eventIds.length ? supabase.from('events').select('id, name').in('id', eventIds) : Promise.resolve({ data: [] }),
         workshopIds.length ? supabase.from('workshops').select('id, title').in('id', workshopIds) : Promise.resolve({ data: [] }),
-        userIds.length ? supabase.from('users').select('id, name, email, enrollment_number').in('id', userIds) : Promise.resolve({ data: [] })
+        userIds.length ? supabase.from('users').select(`
+          id, name, email, enrollment_number, phone, semester,
+          college_id, field_id,
+          colleges!college_id(name),
+          fields!field_id(name)
+        `).in('id', userIds) : Promise.resolve({ data: [] })
       ])
 
       const eventsMap = new Map((eventsRes.data || []).map(e => [e.id, e.name]))
@@ -609,11 +614,15 @@ const Attendance = () => {
 
   const exportToCSV = () => {
     const ws = XLSX.utils.json_to_sheet(attendanceLogs.map(log => ({
-      'User Name': log.users.name,
-      'Email': log.users.email,
-      'Enrollment Number': log.users.enrollment_number,
+      'User Name': log.users?.name || 'N/A',
+      'College': log.users?.colleges?.name || 'N/A',
+      'Field': log.users?.fields?.name || 'N/A',
+      'Semester': log.users?.semester || 'N/A',
+      'Enrollment Number': log.users?.enrollment_number || 'N/A',
+      'Phone Number': log.users?.phone || 'N/A',
+      'Attendance Status': 'Present',
+      'Event Name': log.targetName || 'N/A',
       'Target Type': log.target_type,
-      'Target Name': log.targetName,
       'Scan Time': new Date(log.scan_time).toLocaleString(),
       'Scanned By': log.scanned_by || 'System'
     })))
