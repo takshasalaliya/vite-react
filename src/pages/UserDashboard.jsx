@@ -377,8 +377,8 @@ export default function UserDashboard() {
                       }}
                     />
                   ))}
-                </div>
-                
+      </div>
+
                 {/* Corner Decorations */}
                 <div className="cinematic-corners">
                   <div className="corner top-left"></div>
@@ -665,16 +665,25 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
           name: eventData?.name || (reg.target_type === 'workshop' ? 'Workshop Session' : 'Event Session'),
           description: eventData?.description || 'Join us for an exciting session in the Upside Down!',
           category: category,
-          date: new Date(reg.created_at).toLocaleDateString('en-US', { 
-            month: 'long', 
-            day: 'numeric',
-            year: 'numeric'
-          }),
-          time: new Date(reg.created_at).toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit',
-            hour12: true 
-          }),
+          // Only show date for actual events and workshops, not for combos
+          // Use event's created_at date for events, workshop's start_time for workshops
+          date: reg.target_type === 'combo' ? null : (reg.target_type === 'event' && eventData?.created_at) ? 
+            new Date(eventData.created_at).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              year: 'numeric'
+            }) : (reg.target_type === 'workshop' && eventData?.start_time) ?
+            new Date(eventData.start_time).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              year: 'numeric'
+            }) :
+            new Date(reg.created_at).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              year: 'numeric'
+            }),
+          time: null, // Time removed - only showing dates
           price: eventData?.price || eventData?.fee || reg.amount_paid || 0,
           payment_status: reg.payment_status || 'pending',
           registration_date: reg.created_at?.split('T')[0],
@@ -933,7 +942,7 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
                 {/* Event Header with Character */}
                 <div className="flex justify-between items-start mb-4 relative z-10">
                   <div className="flex-1">
-                    <h4 className="text-lg font-bold text-white mb-3 group-hover:text-[#C96F63] transition-colors duration-300">{event.name}</h4>
+                    <h4 className="text-sm sm:text-base md:text-lg font-bold text-white mb-3 group-hover:text-[#C96F63] transition-colors duration-300 break-words leading-tight">{event.name}</h4>
                     <div className="flex items-center space-x-2 mb-3">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium border-2 ${getCategoryColor(event.category)} backdrop-blur-sm shadow-lg`}>
                         {event.category === 'tech' ? '🚀 Technical' : 
@@ -980,10 +989,12 @@ function DashboardContent({ userData, onRefresh, refreshing, showSuccess, onView
 
                 {/* Event Details - Cosmic Theme */}
                 <div className="space-y-3 text-sm relative z-10">
-                  <div className="flex items-center space-x-3 p-2 bg-[#0B1536]/60 rounded-lg border border-[#C96F63]/20">
-                    <Clock className="w-4 h-4 text-[#C96F63]" />
-                    <span className="text-[#F6F9FF]/90 font-mono">{event.date} at {event.time}</span>
+                  {event.date && (
+                    <div className="flex items-center space-x-3 p-2 bg-[#0B1536]/60 rounded-lg border border-[#C96F63]/20">
+                      <Clock className="w-4 h-4 text-[#C96F63]" />
+                      <span className="text-[#F6F9FF]/90 font-mono">{event.date}</span>
                   </div>
+                  )}
                   <div className="flex items-center space-x-3 p-2 bg-[#0B1536]/60 rounded-lg border border-[#FFCC66]/20">
                     <CreditCard className="w-4 h-4 text-[#FFCC66]" />
                     <span className="text-[#F6F9FF]/90 font-mono">₹{event.price}</span>
@@ -1537,16 +1548,25 @@ function EventsContent({ userData, onViewEvent }) {
           name: eventData?.name || (reg.target_type === 'workshop' ? 'Workshop Session' : 'Event Session'),
           description: eventData?.description || 'Join us for an exciting session in the Upside Down!',
           category: category,
-          date: new Date(reg.created_at).toLocaleDateString('en-US', { 
-            month: 'long', 
-            day: 'numeric',
-            year: 'numeric'
-          }),
-          time: new Date(reg.created_at).toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit',
-            hour12: true 
-          }),
+          // Only show date for actual events and workshops, not for combos
+          // Use event's created_at date for events, workshop's start_time for workshops
+          date: reg.target_type === 'combo' ? null : (reg.target_type === 'event' && eventData?.created_at) ? 
+            new Date(eventData.created_at).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              year: 'numeric'
+            }) : (reg.target_type === 'workshop' && eventData?.start_time) ?
+            new Date(eventData.start_time).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              year: 'numeric'
+            }) :
+            new Date(reg.created_at).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              year: 'numeric'
+            }),
+          time: null, // Time removed - only showing dates
           price: eventData?.price || eventData?.fee || reg.amount_paid || 0,
           payment_status: reg.payment_status || 'pending',
           registration_date: reg.created_at?.split('T')[0],
@@ -1627,7 +1647,7 @@ function EventsContent({ userData, onViewEvent }) {
             {/* Event Header */}
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-white mb-2">{event.name}</h3>
+                <h3 className="text-sm sm:text-base md:text-lg font-bold text-white mb-2 break-words leading-tight">{event.name}</h3>
                 <div className="flex items-center space-x-2 mb-3">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getCategoryColor(event.category)}`}>
                     {event.category === 'tech' ? 'Technical' : 
@@ -1653,10 +1673,12 @@ function EventsContent({ userData, onViewEvent }) {
 
             {/* Event Details */}
             <div className="space-y-3">
+              {event.date && (
               <div className="flex items-center space-x-3 text-sm">
                 <Clock className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300">{event.date} at {event.time}</span>
+                  <span className="text-gray-300">{event.date}</span>
               </div>
+              )}
               <div className="flex items-center space-x-3 text-sm">
                 <CreditCard className="w-4 h-4 text-gray-400" />
                 <span className="text-gray-300">₹{event.price}</span>
@@ -1985,7 +2007,7 @@ function AttendanceContent({
         
         return {
           id: record.id,
-          event_name: eventData?.name || 'Unknown Event',
+          event_name: (eventData?.name || eventData?.title) || 'Unknown Event',
           event_date: record.scan_time?.split('T')[0] || 'TBD',
           check_in_time: record.scan_time ? new Date(record.scan_time).toLocaleTimeString() : 'TBD',
           check_out_time: null, // Attendance table doesn't have check_out_time
@@ -2116,7 +2138,7 @@ function AttendanceContent({
               {/* Event Info */}
               <div className="flex-1">
                 <div className="flex items-center space-x-3 mb-3">
-                  <h3 className="text-lg font-bold text-white">{record.event_name}</h3>
+                  <h3 className="text-sm sm:text-base md:text-lg font-bold text-white break-words leading-tight">{record.event_name}</h3>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(record.status)}`}>
                     {record.status === 'completed' ? 'Completed' : 'Completed'}
                   </span>
