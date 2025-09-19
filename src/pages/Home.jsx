@@ -114,10 +114,6 @@ const Home = () => {
     }
   }
 
-	const handleRegistrationClick = (e) => {
-		e.preventDefault()
-		alert('Registration is closed. Please contact +91 9426532062 (Rudra Patel)')
-	}
 
   if (loading) {
     return (
@@ -180,7 +176,6 @@ const Home = () => {
               </Link>
               <Link
                 to="/register"
-                onClick={handleRegistrationClick}
                 className="inline-flex items-center px-6 sm:px-8 py-3 sm:py-4 border border-[#C96F63]/30 text-base sm:text-lg font-bold rounded-lg text-[#C96F63] bg-[#0B1536]/50 hover:bg-[#0B1536]/70 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#C96F63] transition-all duration-300 backdrop-blur-sm"
               >
                 <Users className="mr-2 h-5 w-5" />
@@ -299,7 +294,6 @@ const Home = () => {
                       </div>
                       <Link
                         to="/register"
-                        onClick={handleRegistrationClick}
                         className="mt-4 inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-[#C96F63] hover:bg-[#C96F63]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#C96F63] transition-colors"
                       >
                         Register Now
@@ -347,7 +341,6 @@ const Home = () => {
                       </div>
                       <Link
                         to="/register"
-                        onClick={handleRegistrationClick}
                         className="mt-4 inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors"
                       >
                         Register Now
@@ -403,7 +396,6 @@ const Home = () => {
 				</div>
                       <Link
                         to="/register"
-                        onClick={handleRegistrationClick}
                         className="mt-4 inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-[#C96F63] hover:bg-[#C96F63]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#C96F63] transition-colors"
                       >
                         Register Now
@@ -451,7 +443,6 @@ const Home = () => {
 							</div>
                       <Link
                         to="/register"
-                        onClick={handleRegistrationClick}
                         className="mt-4 inline-flex items-center justify-center w-full px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-[#C96F63] hover:bg-[#C96F63]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#C96F63] transition-colors"
                       >
                         Register Now
@@ -500,7 +491,6 @@ const Home = () => {
               </Link>
               <Link
                 to="/register"
-                onClick={handleRegistrationClick}
                 className="text-[#F6F9FF]/60 hover:text-[#F6F9FF] text-sm transition-colors"
               >
                 Register
